@@ -1,0 +1,563 @@
+import { companionText, useCompanionName } from '@/features/companionPersona/useCompanionName';
+import { createPortal } from 'react-dom';
+import { classifyMascotFailure, type MascotFailureReason } from './mascotFailure';
+import { t, useLocale, formatNumber } from '@/i18n';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type RefObject } from 'react';
+import { CloseOutlined, MessageOutlined, MinusOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import {
+  pilotMascotRuntime,
+  type PilotMascotActivity,
+  type PilotMascotRuntime,
+  type PilotMascotRuntimeController,
+} from './mascotRuntime';
+import {
+  DEFAULT_PILOT_MASCOT_POSITIONS,
+  normalizePilotMascotZoom,
+  PILOT_MASCOT_MAX_ZOOM,
+  PILOT_MASCOT_MIN_ZOOM,
+  readPilotMascotPositions,
+  resetPilotMascotPosition,
+  positionPilotMascotOutsideSafeAreas,
+  writePilotMascotPosition,
+  type PilotMascotAnimationLevel,
+  type PilotMascotRect,
+  type PilotMascotPlacement,
+  type PilotMascotPosition,
+} from './pilotMascotPreference';
+import { useMascotVisibility } from './useMascotVisibility';
+import styles from './PilotMascot.module.css';
+
+export type { PilotMascotActivity, PilotMascotRuntime } from './mascotRuntime';
+export type { PilotMascotAnimationLevel } from './pilotMascotPreference';
+
+export interface PilotMascotNotification {
+  status: 'success' | 'error';
+  conversationId?: number;
+}
+
+interface Props {
+  compact?: boolean;
+  activity: PilotMascotActivity;
+  panelOpen: boolean;
+  onHide: () => void;
+  onTogglePilot: () => void;
+  zoom?: number;
+  onZoomChange?: (zoom: number) => void;
+  animationLevel?: PilotMascotAnimationLevel;
+  positionResetToken?: number;
+  onAnchorRectChange?: (rect: PilotMascotRect) => void;
+  notification?: PilotMascotNotification | null;
+  placement?: 'contextual' | 'pilot-page' | 'interview-studio';
+  studioEvidenceOpen?: boolean;
+  position?: PilotMascotPosition;
+  onPositionChange?: (position: PilotMascotPosition) => void;
+  runtime?: PilotMascotRuntime;
+  triggerRef?: RefObject<HTMLButtonElement>;
+}
+
+const ACTIVITY_COPY: Record<PilotMascotActivity, { label: string; detail: string }> = {
+  idle: { label: '随时待命', detail: '点击 Haru，和 Pilot 聊聊' },
+  thinking: { label: '正在思考', detail: '我正在整理上下文…' },
+  preparing_voice: { label: '正在准备离线语音', detail: '模型只会下载到当前浏览器' },
+  speaking: { label: '正在朗读', detail: '我在为你读出当前题目' },
+  waiting_for_speech: { label: '等你开口', detail: '准备好后自然开始回答即可' },
+  listening: { label: '正在聆听', detail: '回答录音只保留在当前页面' },
+  speech_paused: { label: '检测到停顿', detail: '可以继续，也可以完成回答' },
+  transcribing: { label: '正在整理语音', detail: '请稍后核对回答文字' },
+  reviewing_voice: { label: '等待核对文字', detail: '确认后才会进入模拟面试回答' },
+  waiting_confirmation: { label: '等待确认', detail: '有一项操作需要你决定' },
+  success: { label: '处理完成', detail: '结果已准备好，来看看吧' },
+  error: { label: '需要确认', detail: '打开 Pilot 查看发生了什么' },
+};
+
+const MASCOT_FRAME = {
+  expanded: { width: 238, height: 370 },
+  narrowDesktop: { width: 150, height: 238 },
+  compact: { width: 116, height: 174 },
+  fallback: { width: 156, height: 48 },
+} as const;
+
+function notificationCopy(notification: PilotMascotNotification | null | undefined) {
+  if (!notification) return undefined;
+  return notification.status === 'success'
+    ? { label: '处理完成', detail: 'Pilot 已完成回答，点击查看' }
+    : { label: '回答未完成', detail: '打开 Pilot 查看并决定是否重试' };
+}
+
+export default function PilotMascot({
+  compact = false,
+  activity,
+  panelOpen,
+  onHide,
+  onTogglePilot,
+  zoom = 1,
+  onZoomChange = () => undefined,
+  animationLevel = 'full',
+  positionResetToken,
+  onAnchorRectChange,
+  notification,
+  placement = 'contextual',
+  studioEvidenceOpen = true,
+  position,
+  onPositionChange,
+  runtime = pilotMascotRuntime,
+  triggerRef: externalTriggerRef,
+}: Props) {
+  const pageVisible = useMascotVisibility();
+  useLocale();
+  const companionName = useCompanionName();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const internalTriggerRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = externalTriggerRef ?? internalTriggerRef;
+  const hideRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const runtimeControllerRef = useRef<PilotMascotRuntimeController>();
+  const latestActivityRef = useRef(activity);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [runtimeReady, setRuntimeReady] = useState(false);
+  const [loadFailureReason, setLoadFailureReason] = useState<MascotFailureReason>();
+  const [fallbackDock, setFallbackDock] = useState<HTMLElement | null>(null);
+  const [globalFallbackDock, setGlobalFallbackDock] = useState<HTMLElement | null>(null);
+  const [sidebarDock, setSidebarDock] = useState<HTMLElement | null>(null);
+  const [localPosition, setLocalPosition] = useState<PilotMascotPosition>(() => {
+    const key = placement === 'interview-studio' ? 'interview_studio' : 'normal';
+    return readPilotMascotPositions()[key];
+  });
+  const [viewport, setViewport] = useState(() => ({
+    width: typeof window === 'undefined' ? 1440 : window.innerWidth,
+    height: typeof window === 'undefined' ? 900 : window.innerHeight,
+  }));
+  const [safeAreaRevision, setSafeAreaRevision] = useState(0);
+  const [reducedMotionRevision, setReducedMotionRevision] = useState(0);
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; startPosition: PilotMascotPosition; moved: boolean }>();
+  const suppressClickRef = useRef(false);
+  latestActivityRef.current = activity;
+  const copy = notificationCopy(notification) ?? ACTIVITY_COPY[activity];
+  const normalizedZoom = normalizePilotMascotZoom(zoom);
+  const zoomPercent = Math.round(normalizedZoom * 100);
+  const studioPlacement = placement === 'interview-studio';
+  const placementKey: PilotMascotPlacement = studioPlacement ? 'interview_studio' : 'normal';
+
+  useEffect(() => {
+    setLoadFailed(false);
+    setLoadFailureReason(undefined);
+  }, [animationLevel, reducedMotionRevision, runtime]);
+
+  useEffect(() => {
+    setRuntimeReady(false);
+    if (loadFailed || !pageVisible) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const abortController = new AbortController();
+    let disposed = false;
+    void runtime.mount(canvas, abortController.signal, animationLevel).then((controller) => {
+      if (disposed) {
+        controller.dispose();
+        return;
+      }
+      runtimeControllerRef.current = controller;
+      // Grow the render frame instead of scaling the model beyond its canvas.
+      // Animated hair and limbs therefore keep a safe render boundary.
+      controller.setZoom(1);
+      controller.setActivity(latestActivityRef.current);
+      setRuntimeReady(true);
+    }).catch((error: unknown) => {
+      if (!disposed && !abortController.signal.aborted) {
+        setRuntimeReady(false);
+        setLoadFailureReason(classifyMascotFailure(error));
+        setLoadFailed(true);
+      }
+    });
+    return () => {
+      disposed = true;
+      abortController.abort();
+      runtimeControllerRef.current?.dispose();
+      runtimeControllerRef.current = undefined;
+    };
+  }, [animationLevel, loadFailed, reducedMotionRevision, runtime, pageVisible]);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const remountRuntime = () => setReducedMotionRevision((revision) => revision + 1);
+    media.addEventListener('change', remountRuntime);
+    return () => media.removeEventListener('change', remountRuntime);
+  }, []);
+
+  useEffect(() => {
+    runtimeControllerRef.current?.setActivity(activity);
+  }, [activity]);
+
+  useEffect(() => {
+    runtimeControllerRef.current?.setZoom(1);
+  }, [normalizedZoom]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    hideRef.current?.focus();
+    const close = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMenuOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    const dismiss = (event: globalThis.PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('keydown', close);
+    document.addEventListener('pointerdown', dismiss);
+    return () => {
+      document.removeEventListener('keydown', close);
+      document.removeEventListener('pointerdown', dismiss);
+    };
+  }, [menuOpen]);
+
+  const setZoom = (nextZoom: number) => onZoomChange(normalizePilotMascotZoom(nextZoom));
+  const actionLabel = t(notification
+    ? notification.status === 'success' ? '查看 Pilot 已完成回答' : '查看 Pilot 回答错误'
+    : placement === 'pilot-page'
+      ? '聚焦 Pilot 输入框'
+      : panelOpen ? '收起 OfferSheep 领航员' : '打开 OfferSheep 领航员');
+  const buttonLabel = loadFailed ? t('{action}（Haru 模型未加载，Pilot 仍可使用）', { action: actionLabel }) : actionLabel;
+
+  // Reserve the sidebar's real free space instead of covering global controls.
+  // Keep the canvas in its original React tree so navigation does not remount it.
+  const sidebarBounds = !studioPlacement && !fallbackDock && !loadFailed
+    ? sidebarDock?.getBoundingClientRect() : undefined;
+  const sidebarRect = sidebarBounds && sidebarBounds.width > 0 && sidebarBounds.height > 0 ? sidebarBounds : undefined;
+  const frame = loadFailed ? MASCOT_FRAME.fallback : sidebarRect || fallbackDock || compact || panelOpen || placement === 'pilot-page' || (studioPlacement && viewport.height < 740)
+    ? MASCOT_FRAME.compact
+    : viewport.width <= 900
+      ? MASCOT_FRAME.narrowDesktop
+      : MASCOT_FRAME.expanded;
+  const fitZoom = sidebarRect ? Math.min(normalizedZoom, sidebarRect.width / frame.width, sidebarRect.height / frame.height) : normalizedZoom;
+  const frameWidth = Math.round(frame.width * (loadFailed ? 1 : fitZoom) * 10) / 10;
+  const frameHeight = Math.round(frame.height * (loadFailed ? 1 : fitZoom) * 10) / 10;
+  const listTable = fallbackDock && !loadFailed
+    ? document.querySelector<HTMLElement>('[data-pilot-mascot-safe-area]')
+    : null;
+  const listTableRect = listTable?.getBoundingClientRect();
+  const scrollContent = listTable?.querySelector<HTMLElement>('.ant-table-content');
+  const scrollHint = listTable?.querySelector<HTMLElement>('[data-pilot-mascot-scroll-hint]');
+  const renderedScrollSpace = (scrollHint ? scrollHint.getBoundingClientRect().height + 8 : 0)
+    + (scrollContent ? scrollContent.offsetHeight - scrollContent.clientHeight : 0);
+  const fullWidthWouldScroll = Boolean(listTable && listTable.parentElement
+    && listTable.parentElement.clientWidth < Number(listTable.dataset.pilotTableMinWidth));
+  // Decide from the full-width layout, not the lane's own added hint/scrollbar.
+  // Otherwise filtering/paginating a long list can retain an unnecessary lane.
+  const fullWidthTableBottom = listTableRect
+    ? listTableRect.bottom - renderedScrollSpace + (fullWidthWouldScroll ? 36 : 0)
+    : 0;
+  const needsListGutter = Boolean(viewport.width >= 768 && listTableRect
+    && fullWidthTableBottom + frameHeight + 32 > viewport.height);
+  const activePosition = position ?? localPosition;
+  void safeAreaRevision;
+  const measuredSafeAreas = typeof document !== 'undefined' && studioPlacement
+    ? [
+      document.querySelector<HTMLElement>('[data-interview-studio] > header'),
+      document.querySelector<HTMLElement>('[data-interview-studio] #interview-answer-panel, [data-interview-studio] [data-interview-studio-answer], [data-interview-studio] [aria-label="回答区"], [data-interview-studio] [aria-label="Answer area"]'),
+      ...(studioEvidenceOpen ? [document.querySelector<HTMLElement>('[data-interview-studio] #interview-evidence-panel, [data-interview-studio] [aria-label="本轮依据"], [data-interview-studio] [aria-label="Evidence for this round"]')] : []),
+      ...Array.from(document.querySelectorAll<HTMLElement>(
+        '[data-interview-studio] [data-interview-studio-question], ' +
+        '[data-interview-studio] [data-interview-studio-evidence-trigger], ' +
+        '[data-interview-studio] [data-interview-studio-follow-up], ' +
+        '[data-interview-studio] [role="alert"]',
+      )),
+    ].map((element) => element?.getBoundingClientRect())
+      .filter((rect): rect is DOMRect => Boolean(rect && rect.width > 0 && rect.height > 0))
+    : fallbackDock && !loadFailed
+      ? Array.from(document.querySelectorAll<HTMLElement>(
+        '[data-pilot-mascot-safe-area], [data-pilot-mascot-toolbar], .op-topbar, .op-sidebar',
+      )).map((element) => element.getBoundingClientRect()).filter((rect) => rect.width > 0 && rect.height > 0)
+      : [];
+  const safeAreas: PilotMascotRect[] = measuredSafeAreas.map((rect) => ({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }));
+  const constrainedPosition = positionPilotMascotOutsideSafeAreas(activePosition, viewport, { width: frameWidth, height: frameHeight }, safeAreas);
+  const frameLeft = sidebarRect ? sidebarRect.left + Math.max(0, sidebarRect.width - frameWidth) * activePosition.xRatio
+    : constrainedPosition.xRatio * viewport.width - frameWidth / 2;
+  const frameTop = sidebarRect ? sidebarRect.top + Math.max(0, sidebarRect.height - frameHeight) * activePosition.yRatio
+    : constrainedPosition.yRatio * viewport.height - frameHeight / 2;
+
+  const reportAnchorRect = useCallback(() => {
+    const anchor = triggerRef.current;
+    if (!anchor || !onAnchorRectChange) return;
+    const rect = anchor.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    onAnchorRectChange({
+      left: rect.left,
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+    });
+  }, [onAnchorRectChange, triggerRef]);
+
+  useEffect(() => {
+    const resize = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener('resize', resize);
+    return () => window.removeEventListener('resize', resize);
+  }, []);
+
+  useLayoutEffect(() => {
+    reportAnchorRect();
+    const anchor = triggerRef.current;
+    if (!anchor || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => reportAnchorRect());
+    observer.observe(anchor);
+    if (anchor.parentElement) observer.observe(anchor.parentElement);
+    if (anchor.parentElement?.parentElement) observer.observe(anchor.parentElement.parentElement);
+    if (fallbackDock?.parentElement) observer.observe(fallbackDock.parentElement);
+    if (globalFallbackDock?.parentElement) observer.observe(globalFallbackDock.parentElement);
+    if (globalFallbackDock?.parentElement?.parentElement) observer.observe(globalFallbackDock.parentElement.parentElement, { box: 'border-box' });
+    return () => observer.disconnect();
+  }, [compact, fallbackDock, globalFallbackDock, loadFailed, frameHeight, frameLeft, frameTop, frameWidth, reportAnchorRect, safeAreaRevision, triggerRef, viewport.height, viewport.width]);
+
+  useEffect(() => {
+    if (!fallbackDock && !sidebarDock && !(loadFailed && globalFallbackDock)) return;
+    const update = () => {
+      if (loadFailed) reportAnchorRect();
+      else setSafeAreaRevision((revision) => revision + 1);
+    };
+    document.addEventListener('scroll', update, true);
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(update);
+    document.querySelectorAll('[data-pilot-mascot-safe-area], [data-pilot-mascot-toolbar], [data-pilot-mascot-sidebar-dock]').forEach((element) => observer?.observe(element));
+    return () => {
+      document.removeEventListener('scroll', update, true);
+      observer?.disconnect();
+    };
+  }, [fallbackDock, globalFallbackDock, sidebarDock, loadFailed, reportAnchorRect]);
+
+  useEffect(() => {
+    if (!studioPlacement || typeof document === 'undefined' || typeof ResizeObserver === 'undefined') return;
+    const studio = document.querySelector<HTMLElement>('[data-interview-studio]');
+    if (!studio) return;
+    const observer = new ResizeObserver(() => setSafeAreaRevision((revision) => revision + 1));
+    [
+      studio.querySelector<HTMLElement>(':scope > header'),
+      studio.querySelector<HTMLElement>('#interview-answer-panel, [data-interview-studio-answer], [aria-label="回答区"], [aria-label="Answer area"]'),
+      studio.querySelector<HTMLElement>('#interview-evidence-panel, [aria-label="本轮依据"], [aria-label="Evidence for this round"]'),
+      ...Array.from(studio.querySelectorAll<HTMLElement>(
+        '[data-interview-studio-question], [data-interview-studio-evidence-trigger], [data-interview-studio-follow-up], [role="alert"]',
+      )),
+    ].forEach((element) => element && observer.observe(element));
+    return () => observer.disconnect();
+  }, [studioPlacement, studioEvidenceOpen]);
+
+  useEffect(() => {
+    if (positionResetToken === undefined || position !== undefined) return;
+    setLocalPosition(readPilotMascotPositions()[placementKey]);
+  }, [placementKey, position, positionResetToken]);
+
+  const setPosition = (next: PilotMascotPosition) => {
+    const safe = {
+      xRatio: Math.min(0.98, Math.max(0.02, next.xRatio)),
+      yRatio: Math.min(0.98, Math.max(0.02, next.yRatio)),
+    };
+    setLocalPosition(safe);
+    writePilotMascotPosition(placementKey, safe);
+    onPositionChange?.(safe);
+  };
+
+  useEffect(() => {
+    if (loadFailed || sidebarRect) return;
+    if (Math.abs(constrainedPosition.xRatio - activePosition.xRatio) < 0.001 && Math.abs(constrainedPosition.yRatio - activePosition.yRatio) < 0.001) return;
+    setLocalPosition(constrainedPosition);
+    writePilotMascotPosition(placementKey, constrainedPosition);
+    onPositionChange?.(constrainedPosition);
+  }, [activePosition.xRatio, activePosition.yRatio, constrainedPosition.xRatio, constrainedPosition.yRatio, loadFailed, Boolean(sidebarRect), onPositionChange]);
+
+  const finishDrag = (event?: PointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    if (event && event.currentTarget.hasPointerCapture(drag.pointerId)) event.currentTarget.releasePointerCapture(drag.pointerId);
+    dragRef.current = undefined;
+    if (drag.moved) {
+      suppressClickRef.current = true;
+      setTimeout(() => { suppressClickRef.current = false; }, 0);
+    }
+  };
+
+  const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, startPosition: sidebarRect ? activePosition : constrainedPosition, moved: false };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handlePointerMove = (event: PointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (!drag.moved && Math.hypot(dx, dy) <= 6) return;
+    drag.moved = true;
+    const moveWidth = sidebarRect ? Math.max(1, sidebarRect.width - frameWidth) : viewport.width;
+    const moveHeight = sidebarRect ? Math.max(1, sidebarRect.height - frameHeight) : viewport.height;
+    setPosition({ xRatio: drag.startPosition.xRatio + dx / moveWidth, yRatio: drag.startPosition.yRatio + dy / moveHeight });
+  };
+
+  useEffect(() => {
+    const cancel = () => finishDrag();
+    window.addEventListener('blur', cancel);
+    return () => {
+      window.removeEventListener('blur', cancel);
+      finishDrag();
+    };
+  }, []);
+
+  const resetPosition = () => {
+    resetPilotMascotPosition(placementKey);
+    setPosition(DEFAULT_PILOT_MASCOT_POSITIONS[placementKey]);
+    setMenuOpen(false);
+  };
+
+  useLayoutEffect(() => {
+    if (studioPlacement) {
+      setFallbackDock(null);
+      setGlobalFallbackDock(null);
+      setSidebarDock(null);
+      return;
+    }
+    const updateDock = () => {
+      setFallbackDock(document.querySelector<HTMLElement>('[data-pilot-mascot-fallback-dock]'));
+      setGlobalFallbackDock(document.querySelector<HTMLElement>('[data-pilot-mascot-global-dock]'));
+      setSidebarDock(document.querySelector<HTMLElement>('[data-pilot-mascot-sidebar-dock]'));
+    };
+    updateDock();
+    const observer = new MutationObserver(updateDock);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [studioPlacement]);
+  const dockedFallback = loadFailed ? fallbackDock ?? globalFallbackDock : null;
+  const mascot = (
+    <aside
+      className={`${styles.mascot} ${panelOpen ? styles.compact : ''} ${loadFailed ? styles.loadFailed : ''} ${
+        placement === 'pilot-page' ? styles.pilotPage : ''
+      } ${studioPlacement ? styles.interviewStudio : styles.normalLayout} ${sidebarRect ? styles.sidebarDock : ''} ${dragRef.current?.moved ? styles.dragging : ''}`}
+      data-sidebar-docked={sidebarRect ? 'true' : undefined}
+      data-runtime-ready={runtimeReady ? 'true' : undefined}
+      data-load-failed={loadFailed ? 'true' : undefined}
+      data-load-failure-reason={loadFailed ? loadFailureReason : undefined}
+      data-global-fallback={loadFailed && !fallbackDock && globalFallbackDock ? 'true' : undefined}
+      data-pilot-list-character={needsListGutter ? 'true' : undefined}
+      data-activity={activity}
+      data-notification={notification?.status}
+      data-animation-level={animationLevel}
+      data-interview-studio-companion={studioPlacement ? 'true' : undefined}
+      aria-label={companionText(t("Haru 助手"), companionName)}
+      style={dockedFallback
+        ? { position: 'relative', width: frameWidth, height: frameHeight, inset: 'auto', zIndex: 1 }
+        : { width: frameWidth, height: frameHeight, left: `${frameLeft}px`, top: `${frameTop}px`, right: 'auto', bottom: 'auto' }}
+    >
+      {notification || (!panelOpen && activity !== 'idle') ? (
+        <div className={styles.bubble} role="status" aria-live="polite">
+          <strong>{t(copy.label)}</strong>
+          <span>{t(copy.detail)}</span>
+        </div>
+      ) : null}
+      <button
+        type="button"
+        className={styles.characterButton}
+        ref={triggerRef}
+        aria-label={buttonLabel}
+        title={loadFailed ? t('Haru 模型未加载，点击仍可使用 Pilot；右键可隐藏角色') : undefined}
+        aria-expanded={placement === 'pilot-page' ? undefined : panelOpen}
+        aria-haspopup={menuOpen ? 'menu' : placement === 'contextual' ? 'dialog' : undefined}
+        aria-controls={panelOpen ? 'haru-chat-window' : menuOpen ? 'pilot-mascot-menu' : undefined}
+        onPointerDown={dockedFallback ? undefined : handlePointerDown}
+        onPointerMove={dockedFallback ? undefined : handlePointerMove}
+        onPointerUp={(event) => finishDrag(event)}
+        onPointerCancel={(event) => finishDrag(event)}
+        onClick={() => { if (!suppressClickRef.current) onTogglePilot(); }}
+        onKeyDown={(event) => {
+          if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+            event.preventDefault();
+            setMenuOpen(true);
+          }
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          setMenuOpen(true);
+        }}
+      >
+        <span className={styles.glow} aria-hidden="true" />
+        <span className={styles.canvasHost} aria-hidden="true">
+          <canvas ref={canvasRef} className={styles.canvas} />
+        </span>
+        {loadFailed ? (
+          <span className={styles.fallback} role="status" aria-live="polite">
+            <MessageOutlined />
+            <span>{t("打开 Pilot")}<small>{t("Haru 模型未加载")}</small></span>
+          </span>
+        ) : null}
+        <span className={styles.nameplate} aria-hidden="true">
+          <span className={styles.statusDot} />
+          {companionName}
+        </span>
+      </button>
+      {menuOpen ? (
+        <div id="pilot-mascot-menu" className={styles.contextMenu} role="menu" ref={menuRef}
+          style={loadFailed && (dockedFallback || frameTop < 300) ? { top: 56, bottom: 'auto' } : undefined}>
+          <div className={styles.zoomHeading} aria-hidden="true">
+            <span>{t("角色大小")}</span>
+            <strong>{formatNumber(zoomPercent)}%</strong>
+          </div>
+          <div className={styles.zoomControls}>
+            <button
+              type="button"
+              role="menuitem"
+              aria-label={t("缩小角色")}
+              disabled={normalizedZoom <= PILOT_MASCOT_MIN_ZOOM}
+              onClick={() => setZoom(normalizedZoom - 0.1)}
+            >
+              <MinusOutlined />
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              aria-label={t("恢复默认大小")}
+              disabled={normalizedZoom === 1}
+              onClick={() => setZoom(1)}
+            >
+              <ReloadOutlined />
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              aria-label={t("放大角色")}
+              disabled={normalizedZoom >= PILOT_MASCOT_MAX_ZOOM}
+              onClick={() => setZoom(normalizedZoom + 0.1)}
+            >
+              <PlusOutlined />
+            </button>
+          </div>
+          <button
+            type="button"
+            role="menuitem"
+            ref={hideRef}
+            onClick={() => {
+              setMenuOpen(false);
+              onHide();
+            }}
+          >
+            <CloseOutlined />
+            {t("隐藏角色")}
+          </button>
+          <button type="button" role="menuitem" aria-label={t("恢复默认位置")} onClick={resetPosition}>
+            <ReloadOutlined />
+            {t("恢复默认位置")}
+          </button>
+          <div className={styles.positionPresets} role="group" aria-label={t("角色位置")}>
+            {([
+              ['左下', 0.16, 0.82],
+              ['右下', 0.84, 0.82],
+              ['右中', 0.84, 0.52],
+            ] as const).map(([label, xRatio, yRatio]) => (
+              <button key={label} type="button" role="menuitem" onClick={() => { setPosition({ xRatio, yRatio }); setMenuOpen(false); }}>{t(label)}</button>
+            ))}
+          </div>
+          <span>{t("可在设置中恢复显示")}</span>
+        </div>
+      ) : null}
+    </aside>
+  );
+  return dockedFallback ? createPortal(mascot, dockedFallback) : mascot;
+}

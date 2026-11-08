@@ -1,0 +1,97 @@
+import CompanionLifeStatus from '@/features/companionLife/CompanionLifeStatus';
+import { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import CalendarHaruPresentation from './CalendarHaruPresentation';
+import PilotMascot, {
+  type PilotMascotActivity,
+  type PilotMascotAnimationLevel,
+} from '@/features/pilotMascot/PilotMascot';
+import type { PilotMascotRect } from '@/features/pilotMascot/pilotMascotPreference';
+import { useAssistantSurface } from './AssistantSurfaceProvider';
+import { isDesktopOwner } from './desktopHaru';
+import HaruChatWindow from './HaruChatWindow';
+
+interface Props {
+  compact?: boolean;
+  visible: boolean;
+  activity: PilotMascotActivity;
+  zoom: number;
+  onZoomChange: (zoom: number) => void;
+  animationLevel?: PilotMascotAnimationLevel;
+  positionResetToken?: number;
+  onHide: () => void;
+  onOpen?: () => void;
+  onExpand?: () => void;
+  calendarHost?: HTMLElement | null;
+  calendarActive?: boolean;
+}
+
+export default function HaruDock({
+  compact = false,
+  visible,
+  activity,
+  zoom,
+  onZoomChange,
+  animationLevel,
+  positionResetToken,
+  onHide,
+  onOpen,
+  onExpand,
+  calendarHost,
+  calendarActive = false,
+}: Props) {
+  const surface = useAssistantSurface();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [anchorRect, setAnchorRect] = useState<PilotMascotRect>();
+
+  if (!visible || isDesktopOwner()) return null;
+
+  const notification = surface.completionNotice
+    ? {
+        status: surface.completionNotice.status === 'completed' ? 'success' as const : 'error' as const,
+        conversationId: surface.completionNotice.conversationId,
+      }
+    : null;
+
+  return (
+    <>
+      {calendarActive ? (calendarHost ? createPortal(<div><CalendarHaruPresentation
+        activity={notification?.status ?? activity}
+        panelOpen={surface.surface === 'haru_chat'}
+        onToggle={() => {
+          if (notification) surface.openCompletionNotice();
+          else if (surface.surface === 'haru_chat') surface.closeSurface();
+          else if (onOpen) onOpen();
+          else surface.openHaru();
+        }}
+        triggerRef={triggerRef}
+        onAnchorRectChange={setAnchorRect}
+        animationLevel={animationLevel}
+      /><CompanionLifeStatus inline suppressed={Boolean(notification) || activity !== 'idle'} /></div>, calendarHost) : null) : <PilotMascot
+        compact={compact}
+        activity={notification?.status ?? activity}
+        panelOpen={surface.surface === 'haru_chat'}
+        onTogglePilot={() => {
+          if (notification) surface.openCompletionNotice();
+          else if (surface.surface === 'haru_chat') surface.closeSurface();
+          else if (onOpen) onOpen();
+          else surface.openHaru();
+        }}
+        onHide={() => {
+          surface.closeSurface();
+          onHide();
+        }}
+        zoom={zoom}
+        onZoomChange={onZoomChange}
+        animationLevel={animationLevel}
+        positionResetToken={positionResetToken}
+        onAnchorRectChange={setAnchorRect}
+        notification={notification}
+        placement="contextual"
+        triggerRef={triggerRef}
+      />}
+      {!calendarActive && <CompanionLifeStatus anchorRect={anchorRect} suppressed={Boolean(notification) || activity !== 'idle'} />}
+      <HaruChatWindow returnFocusRef={triggerRef} onExpand={onExpand} anchorRect={anchorRect} />
+    </>
+  );
+}

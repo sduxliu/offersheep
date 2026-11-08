@@ -1,0 +1,92 @@
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+bin/
+/oc
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# SQLite
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# OfferSheep 本地数据与密钥（默认在仓库外 ../offersheep-data，这里兜底防误提交）
+offersheep-data/
+.env
+.env.*
+*.key
+.mimosa/
+
+# Config (contains user API keys)
+config.json
+
+# Frontend
+web/node_modules/
+web/dist/
+web/tsconfig.tsbuildinfo
+web/*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build output
+build/
+/output/pdf/*.pdf
+
+# Local git worktrees
+.worktrees/
+
+# Root-level workflow artifacts (planning/tickets/verification screenshots)
+/artifacts/test-plans/
+/IMPLEMENTATION_PLAN.md
+/tickets*.md
+/*.png
+
+# Docs 默认按本地工件忽略,跟踪 SSOT 与公开学习内容。
+# SSOT 边界以 docs/architecture/documentation-rules.md 为准。
+docs/*
+!docs/architecture/
+!docs/archive/
+!docs/learn/
+!docs/BUGS.md
+!docs/p0-release-checklist.md
+!docs/python-rewrite-contract.md
+
+# Local brainstorming companion artifacts
+.superpowers/
+
+# Other tools' local state
+.omc/
+.codegraph/
+.codex/
+/artifacts/
+
+# Local browser and whiteboard verification artifacts
+.playwright-mcp/
+diagrams/
+
+# Desktop validation build (source and lockfile remain tracked)
+desktop/node_modules/
+desktop/dist/
+desktop/backend-dist/
+desktop/.build/
+
+# Focused desktop localization evidence (generated)
+desktop/localization-ci-evidence/

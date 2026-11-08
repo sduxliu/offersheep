@@ -1,0 +1,65 @@
+[project]
+name = "offerpilot"
+version = "0.1.0"
+description = "OfferSheep backend (personal fork of offercontext/offerPilot)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "charset-normalizer>=3.3.0",
+  "fastapi>=0.115.0",
+  "httpx>=0.27.0",
+  "jsonschema==4.26.0",
+  "litellm>=1.91.0",
+  "markdown-it-py>=3.0.0",
+  "Pillow>=10.0.0",
+  "pydantic>=2.8.0",
+  "pypdf>=5.0.0",
+  "python-multipart>=0.0.20",
+  "sqlalchemy>=2.0.0",
+  "tiktoken>=0.7.0",
+  "typer>=0.12.0",
+  "tzdata>=2026.3",
+  "uvicorn[standard]>=0.30.0",
+]
+
+[project.scripts]
+oc = "offerpilot.cli:main"
+
+[project.optional-dependencies]
+mcp = [
+    "mcp>=1.26,<2",
+]
+
+[dependency-groups]
+dev = [
+  "mcp>=1.26,<2",
+  "mypy>=1.10.0",
+  "pytest>=8.0.0",
+  "ruff>=0.6.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/offerpilot"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+addopts = "-p tests._offline_network_guard --strict-markers"
+markers = [
+  "p0: core availability, authorization, persistence and recovery safety",
+  "p1: main business behavior and common failure handling",
+  "p2: secondary experience and low-risk compatibility",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+mypy_path = "src"

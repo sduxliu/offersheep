@@ -1,0 +1,647 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { publishPersona } from '@/features/companionPersona/useCompanionName';
+import { setLocale } from '@/i18n';
+import PilotMascot, { type PilotMascotRuntime } from './PilotMascot';
+import type { PilotMascotRuntimeController } from './mascotRuntime';
+
+vi.mock('@/services/companion', async () => {
+  const { enabledCompanionSnapshot: snapshot } = await import('@/features/companionLife/testFixtures');
+  return { getCompanion: async () => snapshot, reportCompanionPresence: async () => snapshot.presence,
+    sendCompanionCommand: async () => snapshot, claimCompanionBid: async () => null };
+});
+vi.mock('@/services/persona', () => ({ getPersona: async () => ({ spec: { display_name: 'Haru' } }) }));
+let container: HTMLDivElement;
+let root: Root;
+
+beforeEach(() => {
+  (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  container = document.createElement('div');
+  document.body.appendChild(container);
+  root = createRoot(container);
+});
+
+afterEach(() => {
+  act(() => root.unmount());
+  container.remove();
+  setLocale('zh-CN');
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+function runtime(): PilotMascotRuntime {
+  return {
+    mount: vi.fn().mockResolvedValue({
+      setActivity: vi.fn(),
+      setZoom: vi.fn(),
+      dispose: vi.fn(),
+    }),
+  };
+}
+
+function runtimeController(): PilotMascotRuntimeController {
+  return { setActivity: vi.fn(), setZoom: vi.fn(), dispose: vi.fn() };
+}
+
+async function renderMascot(overrides: Partial<React.ComponentProps<typeof PilotMascot>> = {}) {
+  const props: React.ComponentProps<typeof PilotMascot> = {
+    activity: 'idle',
+    panelOpen: false,
+    onHide: vi.fn(),
+    onTogglePilot: vi.fn(),
+    runtime: runtime(),
+    ...overrides,
+  };
+  await act(async () => {
+    root.render(<PilotMascot {...props} />);
+    await Promise.resolve();
+  });
+  return props;
+}
+
+describe('PilotMascot', () => {
+  it('keeps application details compact without changing the chat toggle', async () => {
+    const props = await renderMascot({ compact: true });
+    expect(container.querySelector<HTMLElement>('aside')?.style.width).toBe('116px');
+    expect(container.querySelector<HTMLElement>('aside')?.style.height).toBe('174px');
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="打开 OfferSheep 领航员"]')?.click());
+    expect(props.onTogglePilot).toHaveBeenCalledOnce();
+  });
+  it('keeps the idle prompt out of the way and gives the contextual mascot a full-body frame', async () => {
+    await renderMascot({ activity: 'idle', placement: 'contextual' });
+
+    expect(container.querySelector('[role="status"]')).toBeNull();
+    const mascot = container.querySelector<HTMLElement>('aside');
+    expect(mascot?.style.width).toBe('238px');
+    expect(mascot?.style.height).toBe('370px');
+  });
+
+  it('uses a smaller full-body frame at the 768px desktop boundary', async () => {
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 768 });
+    try {
+      await renderMascot({ activity: 'idle', placement: 'contextual' });
+
+      const mascot = container.querySelector<HTMLElement>('aside');
+      expect(mascot?.style.width).toBe('150px');
+      expect(mascot?.style.height).toBe('238px');
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
+    }
+  });
+
+  it('toggles Pilot with an accessible button and exposes activity text', async () => {
+    const props = await renderMascot({ activity: 'thinking' });
+    const button = container.querySelector<HTMLButtonElement>('button[aria-label="打开 OfferSheep 领航员"]');
+    expect(button).not.toBeNull();
+    expect(button?.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(container.textContent).toContain('正在思考');
+    act(() => button!.click());
+    expect(props.onTogglePilot).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['preparing_voice', '正在准备离线语音'],
+    ['speaking', '正在朗读'],
+    ['waiting_for_speech', '等你开口'],
+    ['listening', '正在聆听'],
+    ['speech_paused', '检测到停顿'],
+    ['transcribing', '正在整理语音'],
+    ['reviewing_voice', '等待核对文字'],
+  ] as const)('describes the %s voice activity', async (activity, label) => {
+    await renderMascot({ activity });
+    expect(container.textContent).toContain(label);
+  });
+
+  it('opens a custom context menu and hides the character', async () => {
+    const props = await renderMascot();
+    const button = container.querySelector('button')!;
+    act(() => button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
+    expect(button.getAttribute('aria-haspopup')).toBe('menu');
+    expect(button.getAttribute('aria-controls')).toBe('pilot-mascot-menu');
+    const hide = [...container.querySelectorAll<HTMLButtonElement>('button')]
+      .find((item) => item.textContent?.includes('隐藏角色'));
+    expect(hide).toBeDefined();
+    act(() => hide!.click());
+    expect(props.onHide).toHaveBeenCalledTimes(1);
+  });
+
+  it('moves immediately when a position preset is chosen', async () => {
+    localStorage.clear();
+    await renderMascot({ panelOpen: true, positionResetToken: 0 });
+    const trigger = container.querySelector<HTMLButtonElement>('.characterButton')
+      ?? container.querySelector<HTMLButtonElement>('button')!;
+    act(() => trigger.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
+    const leftPreset = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+      .find((button) => button.textContent === '左下');
+    expect(leftPreset).toBeDefined();
+
+    act(() => leftPreset!.click());
+
+    const frameWidth = 116;
+    expect(container.querySelector<HTMLElement>('aside')?.style.left).toBe(
+      `${0.16 * window.innerWidth - frameWidth / 2}px`,
+    );
+  });
+
+  it('closes the context menu with Escape', async () => {
+    await renderMascot();
+    const button = container.querySelector('button')!;
+    act(() => button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
+    act(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    expect(container.textContent).not.toContain('隐藏角色');
+    expect(document.activeElement).toBe(button);
+  });
+
+  it('opens the context menu from the keyboard and moves focus to its action', async () => {
+    await renderMascot();
+    const button = container.querySelector<HTMLButtonElement>('button')!;
+    act(() => button.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true })));
+    expect(document.activeElement?.textContent).toContain('隐藏角色');
+  });
+
+  it('keeps a normal model inside reserved sidebar space without remounting on dock changes', async () => {
+    const dock = document.createElement('div');
+    dock.setAttribute('data-pilot-mascot-sidebar-dock', '');
+    let bounds = { left: 12, top: 340, width: 190, height: 150, right: 202, bottom: 490 };
+    vi.spyOn(dock, 'getBoundingClientRect').mockImplementation(() => bounds as DOMRect);
+    document.body.append(dock);
+    const mounted = runtime();
+    const props = await renderMascot({ runtime: mounted, zoom: 1.4 });
+    const assertInside = () => {
+      const aside = container.querySelector<HTMLElement>('aside')!;
+      expect(aside.dataset.sidebarDocked).toBe('true');
+      const left = parseFloat(aside.style.left); const top = parseFloat(aside.style.top);
+      expect(left).toBeGreaterThanOrEqual(bounds.left);
+      expect(top).toBeGreaterThanOrEqual(bounds.top);
+      expect(left + parseFloat(aside.style.width)).toBeLessThanOrEqual(bounds.right + 0.1);
+      expect(top + parseFloat(aside.style.height)).toBeLessThanOrEqual(bounds.bottom + 0.1);
+    };
+    assertInside();
+    const originalLeft = container.querySelector<HTMLElement>('aside')!.style.left;
+    act(() => container.querySelector('button')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
+    act(() => [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(button => button.textContent === '左下')!.click());
+    assertInside();
+    expect(container.querySelector<HTMLElement>('aside')!.style.left).not.toBe(originalLeft);
+    bounds = { left: 12, top: 340, width: 160, height: 120, right: 172, bottom: 460 };
+    await act(async () => { window.dispatchEvent(new Event('resize')); });
+    assertInside();
+    expect(mounted.mount).toHaveBeenCalledTimes(1);
+    await act(async () => { dock.remove(); });
+    expect(container.querySelector<HTMLElement>('aside')?.dataset.sidebarDocked).toBeUndefined();
+    expect(mounted.mount).toHaveBeenCalledTimes(1);
+    expect(props.onTogglePilot).not.toHaveBeenCalled();
+  });
+
+  it('keeps Pilot usable when the Live2D runtime fails', async () => {
+    const broken: PilotMascotRuntime = { mount: vi.fn().mockRejectedValue(new Error('model failed')) };
+    const props = await renderMascot({ runtime: broken });
+    expect(container.textContent).toContain('Haru 模型未加载');
+    expect(container.querySelector('aside')?.getAttribute('data-runtime-ready')).toBeNull();
+    expect(container.querySelector('aside')?.getAttribute('data-load-failure-reason')).toBe('unknown');
+    expect(container.querySelector<HTMLElement>('aside')?.style.width).toBe('156px');
+    expect(container.querySelector<HTMLElement>('aside')?.style.height).toBe('48px');
+    expect(container.querySelector('[role="status"]')?.getAttribute('aria-hidden')).toBeNull();
+    const fallbackTrigger = container.querySelector<HTMLButtonElement>('.characterButton')
+      ?? container.querySelector<HTMLButtonElement>('button');
+    expect(fallbackTrigger?.getAttribute('aria-haspopup')).toBe('dialog');
+    act(() => container.querySelector('button')!.click());
+    expect(props.onTogglePilot).toHaveBeenCalledTimes(1);
+  });
+
+  it('exposes only a bounded mount-failure category without raw error details', async () => {
+    const message = 'Current environment does not allow unsafe-eval secret-token=not-for-dom';
+    await renderMascot({ runtime: { mount: vi.fn().mockRejectedValue(new Error(message)) } });
+    expect(container.querySelector('aside')?.getAttribute('data-load-failure-reason')).toBe('dynamic-code-policy');
+    expect(container.innerHTML).not.toContain('secret-token');
+    expect(container.innerHTML).not.toContain(message);
+  });
+
+  it('keeps a normal list character compact and outside a tall table at maximum zoom', async () => {
+    const dock = document.createElement('div');
+    dock.setAttribute('data-pilot-mascot-fallback-dock', '');
+    const table = document.createElement('div');
+    table.setAttribute('data-pilot-mascot-safe-area', '');
+    table.getBoundingClientRect = () => ({ left: 240, top: 200, right: 800, bottom: 1200, width: 560, height: 1000, x: 240, y: 200, toJSON: () => ({}) });
+    document.body.append(dock, table);
+    try {
+      await renderMascot({ zoom: 1.3, position: { xRatio: 0.9, yRatio: 0.8 } });
+      const mascot = container.querySelector<HTMLElement>('aside')!;
+      expect(mascot.style.width).toBe('150.8px');
+      expect(mascot.style.height).toBe('226.2px');
+      expect(mascot.dataset.pilotListCharacter).toBe('true');
+      expect(Number.parseFloat(mascot.style.left)).toBeGreaterThanOrEqual(800);
+      expect(dock.querySelector('canvas')).toBeNull();
+    } finally {
+      await act(async () => { dock.remove(); table.remove(); });
+    }
+  });
+
+  it('releases a lane when only its own scrolling chrome prevents the full-width table from fitting', async () => {
+    const dock = document.createElement('div');
+    dock.setAttribute('data-pilot-mascot-fallback-dock', '');
+    const list = document.createElement('section');
+    Object.defineProperty(list, 'clientWidth', { value: 1016 });
+    const table = document.createElement('div');
+    table.setAttribute('data-pilot-mascot-safe-area', '');
+    table.dataset.pilotTableMinWidth = '982';
+    const bottom = window.innerHeight - 190;
+    table.getBoundingClientRect = () => ({ left: 240, top: 200, right: 800, bottom, width: 560, height: bottom - 200, x: 240, y: 200, toJSON: () => ({}) });
+    const scroll = document.createElement('div');
+    scroll.className = 'ant-table-content';
+    Object.defineProperties(scroll, { offsetHeight: { value: 200 }, clientHeight: { value: 192 } });
+    const hint = document.createElement('p');
+    hint.setAttribute('data-pilot-mascot-scroll-hint', '');
+    hint.getBoundingClientRect = () => ({ height: 18 } as DOMRect);
+    table.append(hint, scroll);
+    list.append(table);
+    document.body.append(dock, list);
+    try {
+      await renderMascot();
+      expect(container.querySelector<HTMLElement>('aside')?.dataset.pilotListCharacter).toBeUndefined();
+    } finally {
+      await act(async () => { dock.remove(); list.remove(); });
+    }
+  });
+
+  it('does not reserve desktop space for the hidden mobile character', async () => {
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 375 });
+    const dock = document.createElement('div');
+    dock.setAttribute('data-pilot-mascot-fallback-dock', '');
+    const table = document.createElement('div');
+    table.setAttribute('data-pilot-mascot-safe-area', '');
+    table.getBoundingClientRect = () => ({ left: 16, top: 200, right: 359, bottom: 1200, width: 343, height: 1000, x: 16, y: 200, toJSON: () => ({}) });
+    document.body.append(dock, table);
+    try {
+      await renderMascot();
+      expect(container.querySelector<HTMLElement>('aside')?.dataset.pilotListCharacter).toBeUndefined();
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
+      await act(async () => { dock.remove(); table.remove(); });
+    }
+  });
+
+  it('does not reserve a side lane when the normal character fits below a short list', async () => {
+    const dock = document.createElement('div');
+    dock.setAttribute('data-pilot-mascot-fallback-dock', '');
+    const table = document.createElement('div');
+    table.setAttribute('data-pilot-mascot-safe-area', '');
+    table.getBoundingClientRect = () => ({ left: 240, top: 200, right: 984, bottom: 300, width: 744, height: 100, x: 240, y: 200, toJSON: () => ({}) });
+    document.body.append(dock, table);
+    try {
+      await renderMascot({ position: { xRatio: 0.9, yRatio: 0.8 } });
+      const mascot = container.querySelector<HTMLElement>('aside')!;
+      expect(mascot.style.width).toBe('116px');
+      expect(mascot.dataset.pilotListCharacter).toBeUndefined();
+      expect(Number.parseFloat(mascot.style.top)).toBeGreaterThanOrEqual(300);
+    } finally {
+      await act(async () => { dock.remove(); table.remove(); });
+    }
+  });
+
+  it('keeps a failed model in the global header outside the list, below modal overlays', async () => {
+    const header = document.createElement('div');
+    header.setAttribute('data-pilot-mascot-global-dock', '');
+    document.body.append(header);
+    try {
+      const broken: PilotMascotRuntime = { mount: vi.fn().mockRejectedValue(new Error('model failed')) };
+      const props = await renderMascot({ runtime: broken });
+      const mascot = header.querySelector<HTMLElement>('aside')!;
+      expect(mascot.style.position).toBe('relative');
+      expect(mascot.style.zIndex).toBe('1');
+      expect(mascot.dataset.globalFallback).toBe('true');
+      expect(mascot.style.height).toBe('48px');
+      act(() => header.querySelector('button')!.click());
+      expect(props.onTogglePilot).toHaveBeenCalledOnce();
+      const list = document.createElement('div');
+      list.setAttribute('data-pilot-mascot-fallback-dock', '');
+      await act(async () => { document.body.append(list); });
+      expect(list.querySelector('aside')).not.toBeNull();
+      expect(header.querySelector('aside')).toBeNull();
+      await act(async () => { list.remove(); });
+      expect(header.querySelector('aside')).not.toBeNull();
+      await act(async () => { root.render(<PilotMascot {...props} runtime={runtime()} />); });
+      expect(header.querySelector('aside')).toBeNull();
+      expect(container.querySelector<HTMLElement>('aside')?.style.width).toBe('238px');
+      expect(container.querySelector('canvas')?.isConnected).toBe(true);
+    } finally {
+      await act(async () => { header.remove(); });
+    }
+  });
+
+  it('observes the header actions so a wrapped global dock reports its new anchor', async () => {
+    const header = document.createElement('header');
+    const actions = document.createElement('div');
+    const dock = document.createElement('div');
+    dock.setAttribute('data-pilot-mascot-global-dock', '');
+    actions.append(dock); header.append(actions); document.body.append(header);
+    const observed: Element[] = [];
+    const callbacks: (() => void)[] = [];
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: () => void) { callbacks.push(callback); }
+      observe(element: Element) { observed.push(element); }
+      disconnect() {}
+    });
+    let left = 500;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return this.tagName === 'BUTTON'
+        ? { left, top: 18, right: left + 156, bottom: 66, width: 156, height: 48, x: left, y: 18, toJSON: () => ({}) }
+        : { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}) };
+    });
+    try {
+      const onAnchorRectChange = vi.fn();
+      await renderMascot({ runtime: { mount: vi.fn().mockRejectedValue(new Error('model failed')) }, onAnchorRectChange });
+      expect(observed).toContain(actions); expect(observed).toContain(header);
+      left = 320;
+      act(() => callbacks.forEach((callback) => callback()));
+      expect(onAnchorRectChange).toHaveBeenLastCalledWith({ left: 320, top: 18, right: 476, bottom: 66 });
+    } finally {
+      await act(async () => { header.remove(); });
+    }
+  });
+
+  it('docks the failed entrance when the list appears and restores it when the list leaves', async () => {
+    const broken: PilotMascotRuntime = { mount: vi.fn().mockRejectedValue(new Error('model failed')) };
+    await renderMascot({ runtime: broken });
+    const dock = document.createElement('div');
+    dock.setAttribute('data-pilot-mascot-fallback-dock', '');
+    await act(async () => { document.body.append(dock); });
+    expect(dock.querySelector('aside')?.getAttribute('data-load-failed')).toBe('true');
+    expect(dock.querySelector<HTMLElement>('aside')?.style.position).toBe('relative');
+    await act(async () => { dock.remove(); });
+    expect(container.querySelector('aside')?.getAttribute('data-load-failed')).toBe('true');
+    expect(dock.querySelector('aside')).toBeNull();
+  });
+
+  it('reports the new dock anchor and updates it when the content scrolls', async () => {
+    const original = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.tagName !== 'BUTTON') return original.call(this);
+      const left = this.closest('[data-pilot-mascot-fallback-dock]') ? 400 : 800;
+      return { x: left, y: 100, left, top: 100, right: left + 156, bottom: 148, width: 156, height: 48, toJSON: () => ({}) };
+    });
+    const onAnchorRectChange = vi.fn();
+    const broken: PilotMascotRuntime = { mount: vi.fn().mockRejectedValue(new Error('model failed')) };
+    await renderMascot({ runtime: broken, onAnchorRectChange });
+    expect(onAnchorRectChange).toHaveBeenLastCalledWith({ left: 800, top: 100, right: 956, bottom: 148 });
+    const dock = document.createElement('div');
+    dock.setAttribute('data-pilot-mascot-fallback-dock', '');
+    await act(async () => { document.body.append(dock); });
+    expect(onAnchorRectChange).toHaveBeenLastCalledWith({ left: 400, top: 100, right: 556, bottom: 148 });
+    onAnchorRectChange.mockClear();
+    act(() => dock.dispatchEvent(new Event('scroll')));
+    expect(onAnchorRectChange).toHaveBeenCalledOnce();
+    await act(async () => { dock.remove(); });
+  });
+
+  it('retries with the connected canvas after leaving the failure dock', async () => {
+    const dock = document.createElement('div');
+    dock.setAttribute('data-pilot-mascot-fallback-dock', '');
+    document.body.append(dock);
+    const mount = vi.fn().mockRejectedValueOnce(new Error('model failed')).mockResolvedValue(runtimeController());
+    const props = await renderMascot({ runtime: { mount } });
+    expect(dock.querySelector('aside')).not.toBeNull();
+    await act(async () => { root.render(<PilotMascot {...props} animationLevel="minimal" />); });
+    const mountedCanvas = mount.mock.calls[mount.mock.calls.length - 1]?.[0] as HTMLCanvasElement;
+    expect(mountedCanvas.isConnected).toBe(true);
+    expect(mountedCanvas).toBe(container.querySelector('canvas'));
+    expect(container.querySelector('[data-load-failed]')).toBeNull();
+    expect(container.querySelector('aside')?.getAttribute('data-runtime-ready')).toBe('true');
+    expect(dock.querySelector('aside')).toBeNull();
+    dock.remove();
+  });
+
+  it('reports the real trigger rect after position, size, and viewport changes', async () => {
+    const onAnchorRectChange = vi.fn();
+    const rect = {
+      left: 1210,
+      top: 420,
+      right: 1440,
+      bottom: 790,
+      width: 230,
+      height: 370,
+      x: 1210,
+      y: 420,
+      toJSON: () => ({}),
+    } as DOMRect;
+    await renderMascot({ onAnchorRectChange });
+    const trigger = container.querySelector<HTMLButtonElement>('.characterButton')
+      ?? container.querySelector<HTMLButtonElement>('button')!;
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(rect);
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth + 1 });
+    await act(async () => {
+      window.dispatchEvent(new Event('resize'));
+      await Promise.resolve();
+    });
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
+    expect(onAnchorRectChange).toHaveBeenCalledWith({
+      left: rect.left,
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+    });
+  });
+
+  it('reloads a reset position when the reset token changes', async () => {
+    localStorage.setItem('offerpilot:pilot-mascot-position', JSON.stringify({
+      version: 1,
+      normal: { xRatio: 0.2, yRatio: 0.35 },
+      interview_studio: { xRatio: 0.72, yRatio: 0.46 },
+    }));
+    const props = await renderMascot({ positionResetToken: 1 });
+    const viewportWidth = window.innerWidth || 1440;
+    expect(container.querySelector<HTMLElement>('aside')?.style.left).toBe(`${0.2 * viewportWidth - 119}px`);
+    localStorage.setItem('offerpilot:pilot-mascot-position', JSON.stringify({
+      version: 1,
+      normal: { xRatio: 0.8, yRatio: 0.7 },
+      interview_studio: { xRatio: 0.72, yRatio: 0.46 },
+    }));
+    await act(async () => {
+      root.render(<PilotMascot {...props} positionResetToken={2} />);
+      await Promise.resolve();
+    });
+    expect(container.querySelector<HTMLElement>('aside')?.style.left).toBe(`${0.8 * viewportWidth - 119}px`);
+  });
+
+  it('disposes the runtime on unmount', async () => {
+    const controller = runtimeController();
+    const mounted: PilotMascotRuntime = { mount: vi.fn().mockResolvedValue(controller) };
+    await renderMascot({ runtime: mounted });
+    act(() => root.unmount());
+    expect(controller.dispose).toHaveBeenCalledTimes(1);
+    root = createRoot(container);
+  });
+
+  it('remounts the runtime when the system reduced-motion preference changes', async () => {
+    let changeListener: (() => void) | undefined;
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
+      matches: false,
+      addEventListener: (_type: string, listener: () => void) => { changeListener = listener; },
+      removeEventListener: vi.fn(),
+    }));
+    const firstController = runtimeController();
+    const secondController = runtimeController();
+    const mounted: PilotMascotRuntime = {
+      mount: vi.fn()
+        .mockResolvedValueOnce(firstController)
+        .mockResolvedValueOnce(secondController),
+    };
+    await renderMascot({ runtime: mounted });
+
+    await act(async () => {
+      changeListener?.();
+      await Promise.resolve();
+    });
+
+    expect(mounted.mount).toHaveBeenCalledTimes(2);
+    expect(firstController.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborts an in-flight runtime before a StrictMode-style remount', async () => {
+    const signals: AbortSignal[] = [];
+    const pending: PilotMascotRuntime = {
+      mount: vi.fn((_canvas: HTMLCanvasElement, signal?: AbortSignal): Promise<PilotMascotRuntimeController> => {
+        if (signal) signals.push(signal);
+        return new Promise<PilotMascotRuntimeController>(() => undefined);
+      }),
+    };
+    await act(async () => {
+      root.render(
+        <PilotMascot
+          activity="idle"
+          panelOpen={false}
+          onHide={vi.fn()}
+          onTogglePilot={vi.fn()}
+          runtime={pending}
+        />,
+      );
+    });
+    act(() => root.unmount());
+    expect(signals[0]?.aborted).toBe(true);
+    root = createRoot(container);
+  });
+
+  it('synchronizes activity and zoom with the mounted runtime controller', async () => {
+    const controller = runtimeController();
+    const mounted: PilotMascotRuntime = { mount: vi.fn().mockResolvedValue(controller) };
+    const base = {
+      panelOpen: false,
+      onHide: vi.fn(),
+      onTogglePilot: vi.fn(),
+      onZoomChange: vi.fn(),
+      runtime: mounted,
+    };
+    await act(async () => {
+      root.render(<PilotMascot {...base} activity="thinking" zoom={1.1} />);
+      await Promise.resolve();
+    });
+    expect(controller.setActivity).toHaveBeenLastCalledWith('thinking');
+    expect(controller.setZoom).toHaveBeenLastCalledWith(1);
+
+    await act(async () => {
+      root.render(<PilotMascot {...base} activity="success" zoom={1.2} />);
+      await Promise.resolve();
+    });
+    expect(controller.setActivity).toHaveBeenLastCalledWith('success');
+    expect(controller.setZoom).toHaveBeenLastCalledWith(1);
+  });
+
+  it('enlarges the mascot frame so zoom never crops the model inside a fixed canvas', async () => {
+    const controller = runtimeController();
+    const mounted: PilotMascotRuntime = { mount: vi.fn().mockResolvedValue(controller) };
+    await renderMascot({ runtime: mounted, zoom: 1.3, placement: 'interview-studio' });
+
+    const mascot = container.querySelector<HTMLElement>('aside');
+    expect(mascot?.style.width).toBe('309.4px');
+    expect(mascot?.style.height).toBe('481px');
+    expect(controller.setZoom).toHaveBeenLastCalledWith(1);
+  });
+
+  it('offers bounded zoom controls and reset in the context menu', async () => {
+    const onZoomChange = vi.fn();
+    const props = await renderMascot({ zoom: 1, onZoomChange });
+    const trigger = container.querySelector<HTMLButtonElement>('.characterButton')
+      ?? container.querySelector<HTMLButtonElement>('button')!;
+    act(() => trigger.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
+    const buttons = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+    const smaller = buttons.find((button) => button.getAttribute('aria-label') === '缩小角色');
+    const reset = buttons.find((button) => button.getAttribute('aria-label') === '恢复默认大小');
+    const larger = buttons.find((button) => button.getAttribute('aria-label') === '放大角色');
+    expect(container.textContent).toContain('100%');
+    act(() => smaller!.click());
+    act(() => larger!.click());
+    expect(onZoomChange.mock.calls.map(([value]) => value)).toEqual([0.9, 1.1]);
+
+    await act(async () => {
+      root.render(<PilotMascot {...props} zoom={1.2} />);
+      await Promise.resolve();
+    });
+    act(() => reset!.click());
+    expect(onZoomChange).toHaveBeenLastCalledWith(1);
+  });
+
+  it('disables zoom controls at the limits and announces a completed reply', async () => {
+    await renderMascot({
+      activity: 'success',
+      zoom: 1.3,
+      notification: { status: 'success', conversationId: 42 },
+    });
+    const trigger = container.querySelector<HTMLButtonElement>('button')!;
+    expect(container.textContent).toContain('Pilot 已完成回答，点击查看');
+    act(() => trigger.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="放大角色"]')?.disabled).toBe(true);
+  });
+
+  it('updates an open menu and activity in place without restarting the character runtime', async () => {
+    const props = await renderMascot({ activity: 'thinking' });
+    const canvas = container.querySelector('canvas');
+    const trigger = container.querySelector<HTMLButtonElement>('button[aria-label="打开 OfferSheep 领航员"]');
+    act(() => trigger?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+    expect(container.querySelector('[role="menu"]')).not.toBeNull();
+    act(() => setLocale('en-US'));
+    expect(container.textContent).toContain('Thinking');
+    expect(container.textContent).toContain('Character size');
+    expect(container.textContent).toContain('Bottom left');
+    expect(container.querySelector('[aria-label="Make character smaller"]')).not.toBeNull();
+    expect(container.querySelector('[role="menu"]')).not.toBeNull();
+    expect(container.querySelector('canvas')).toBe(canvas);
+    expect(props.runtime?.mount).toHaveBeenCalledTimes(1);
+  });
+
+
+  it('reserves the Studio answer area by its stable ID independently of its translated label', async () => {
+    const studio = document.createElement('div');
+    studio.setAttribute('data-interview-studio', '');
+    const answer = document.createElement('section');
+    answer.id = 'interview-answer-panel';
+    answer.setAttribute('aria-label', 'Localized answer workspace');
+    studio.appendChild(answer);
+    document.body.appendChild(studio);
+    const answerRect = { left: 700, top: 120, right: 1024, bottom: 700, width: 324, height: 580 };
+    vi.spyOn(answer, 'getBoundingClientRect').mockReturnValue(answerRect as DOMRect);
+    try {
+      await renderMascot({ placement: 'interview-studio', position: { xRatio: 0.82, yRatio: 0.5 } });
+      const mascot = container.querySelector<HTMLElement>('aside')!;
+      const left = Number.parseFloat(mascot.style.left);
+      const top = Number.parseFloat(mascot.style.top);
+      const right = left + Number.parseFloat(mascot.style.width);
+      const bottom = top + Number.parseFloat(mascot.style.height);
+      expect(right <= answerRect.left || left >= answerRect.right || bottom <= answerRect.top || top >= answerRect.bottom).toBe(true);
+    } finally {
+      studio.remove();
+    }
+  });
+
+});
+
+it('uses the saved companion name for the visible nameplate and accessible entry', async () => {
+  await renderMascot();
+  act(() => publishPersona({ profile_id: 'fixture', revision: 1, content_hash: 'hash', policy_version: 'core', presets: [], spec: { display_name: 'Nova', traits: [], speaking_style: '', verbosity: 'balanced', interests_text: '', fictional_background: '', additional_style_notes: '', enabled_activity_templates: [] } }));
+  expect(container.textContent).toContain('Nova');
+  expect(container.querySelector('[aria-label="Nova 助手"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="Haru 助手"]')).toBeNull();
+});

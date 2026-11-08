@@ -1,0 +1,59 @@
+.card {
+  min-width: 0;
+  height: 100%;
+  border-radius: 14px;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--op-ink, #111827) 6%, transparent);
+}
+
+.heading {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.heading > :global(.ant-space-item) {
+  min-width: 0;
+}
+
+.company {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.position {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--op-muted-strong, #374151);
+}
+
+.salary {
+  margin-top: 12px;
+  color: var(--op-ink, #111827);
+  font-size: 24px;
+  font-weight: 720;
+  font-variant-numeric: tabular-nums;
+}
+
+.facts {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+  color: var(--op-muted-strong, #6b7280);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.actions :global(.ant-btn) {
+  min-height: 40px;
+}
