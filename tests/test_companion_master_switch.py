@@ -49,7 +49,7 @@ def assert_ordinary(messages):
     for forbidden in ('"source": "companion_life"', 'companion-v1.6', '被好好照顾着、无忧无虑', '呆萌'):
         assert forbidden not in content
     system = '\n'.join(message.content for message in messages if message.role == 'system')
-    assert 'OfferPilot' in system
+    assert 'OfferSheep' in system
     assert '不要暴露隐藏推理' in system
     assert '不编造' in system
 

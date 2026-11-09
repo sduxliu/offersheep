@@ -114,7 +114,7 @@ export default function ApplicationListView({
       render: (value: string) => <span className={styles.muted}>{dayjs(value).format('YYYY-MM-DD HH:mm')}</span>,
     },
     {
-      title: 'Pilot',
+      title: t('Pilot'),
       key: 'pilot',
       width: 112,
       render: (_, row) => (

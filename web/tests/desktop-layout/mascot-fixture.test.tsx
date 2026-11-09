@@ -31,7 +31,7 @@ async function mount() {
 
 it('requires the layout opt-in read to name a rendered fallback and preserves names across opt-out', async () => {
   await mount();
-  expect(host.querySelector('aside[aria-label="咩咩 助手"]')?.getAttribute('data-load-failed')).toBe('true');
+  expect(host.querySelector('aside[aria-label="咩咩助手"]')?.getAttribute('data-load-failed')).toBe('true');
   expect(host.querySelector('aside[aria-label="Haru 助手"]')).toBeNull();
   state.requests = [];
   state.api = createMascotFixture();
@@ -41,9 +41,9 @@ it('requires the layout opt-in read to name a rendered fallback and preserves na
   const snapshot = state.api.handle('GET', '/api/companion').data;
   const persona = state.api.handle('GET', '/api/companion/persona').data;
   act(() => publishCompanionSnapshot({ ...snapshot, revision: snapshot.revision + 1, settings: { ...snapshot.settings, enabled: false } }));
-  expect(host.querySelector('aside')?.getAttribute('aria-label')).toBe('咩咩 助手');
+  expect(host.querySelector('aside')?.getAttribute('aria-label')).toBe('咩咩助手');
   act(() => publishPersona({ ...persona, revision: persona.revision + 1, spec: { ...persona.spec, display_name: 'Nova' } }));
-  expect(host.querySelector('aside')?.getAttribute('aria-label')).toBe('咩咩 助手');
+  expect(host.querySelector('aside')?.getAttribute('aria-label')).toBe('咩咩助手');
   act(() => publishCompanionSnapshot({ ...snapshot, revision: snapshot.revision + 2 }));
   expect(host.querySelector('aside')?.getAttribute('aria-label')).toBe('Nova 助手');
   expect(state.requests).toHaveLength(2);

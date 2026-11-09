@@ -47,7 +47,7 @@ describe('Pilot live locale switching', () => {
     act(() => setLocale('en-US'));
     expect(host.querySelector('textarea')).toBe(input);
     expect(input.value).toBe('保留我的中文草稿');
-    expect(input.placeholder).toBe('Ask Pilot, or type / to browse actions');
+    expect(input.placeholder).toBe('Ask Job Assistant, or type / to browse actions');
     expect(host.querySelector('[aria-label="Send"]')).not.toBeNull();
     expect(send).not.toHaveBeenCalled();
     act(() => change(input, '/application'));

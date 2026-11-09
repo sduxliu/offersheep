@@ -84,7 +84,7 @@ def test_active_change_does_not_change_admitted_source_and_legacy_is_official(tm
 
 
 @pytest.mark.parametrize('endpoint', ['/api/chat', '/api/chat/stream', '/api/pilot/runtime/v1/turns'])
-@pytest.mark.parametrize('old_name,new_name', [('旧名字', '新名字'), ('Haru', '新名字'), ('旧名字', 'Haru')])
+@pytest.mark.parametrize('old_name,new_name', [('旧名字', '新名字'), ('咩咩', '新名字'), ('旧名字', '咩咩')])
 def test_acceptance_freezes_before_execution_and_next_turn_changes(tmp_path, monkeypatch, endpoint, old_name, new_name):
     from offerpilot.pilot_runtime.service import PilotRuntime
     model = CountingModel()
@@ -100,7 +100,7 @@ def test_acceptance_freezes_before_execution_and_next_turn_changes(tmp_path, mon
         nonlocal changed
         if not changed:
             changed = True
-            if new_name == 'Haru':
+            if new_name == '咩咩':
                 from offerpilot.companion.persona_contracts import PersonaRestoreCommand
                 view = repo.read()
                 repo.mutate(PersonaRestoreCommand(operation='restore', profile_id=view['profile_id'],
@@ -118,7 +118,7 @@ def test_acceptance_freezes_before_execution_and_next_turn_changes(tmp_path, mon
             state = _wait_for_status(client, response.json()['turn_id'], terminal={'completed', 'failed'})
             assert state['state'] == 'completed', state
         assert model.calls == 1
-        if old_name == 'Haru':
+        if old_name == '咩咩':
             assert not profile(model.messages)
             assert '被好好照顾着、无忧无虑' in model.messages[0].content
         else:
@@ -137,7 +137,7 @@ def test_acceptance_freezes_before_execution_and_next_turn_changes(tmp_path, mon
         second = client.post('/api/chat', json={'request_id': str(uuid4()), 'message': '再次你好'})
         assert second.status_code == 200, second.text
         assert model.calls == 2
-        if new_name == 'Haru':
+        if new_name == '咩咩':
             assert not profile(model.messages)
             assert '被好好照顾着、无忧无虑' in model.messages[0].content
         else:

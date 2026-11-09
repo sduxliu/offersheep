@@ -113,7 +113,7 @@ it('owner loss disables sends and pending actions open owner without confirmatio
   expect(host.textContent).toContain('连接');
   request.mockResolvedValue({ ok: true });
   await act(async () => update({ ...state, snapshot: { ...state.snapshot!, hasPending: true, canSend: false } }));
-  await act(async () => button('到 Pilot 查看并确认').click());
+  await act(async () => button('到求职助手查看并确认').click());
   expect(request).toHaveBeenCalledWith({ action: 'open-pending', version: 2, generation: 3 });
 });
 it('collapsed idle stays animated, hiding disposes runtime and expanded stop uses no Live2D', async () => {
@@ -421,11 +421,11 @@ it('re-renders an authored send failure on native locale events without translat
   expect(window.offerpilotLocale).not.toHaveProperty('setLocale');
   state = { ...state, snapshot: { ...state.snapshot!, error: DESKTOP_HARU_SEND_FAILURE, errorKey: 'desktop_send_failed' } };
   await mount();
-  expect(host.textContent).toContain('Sending failed. Check the conversation in Pilot before trying again.');
+  expect(host.textContent).toContain('Sending failed. Check the conversation in Job Assistant before trying again.');
   await act(async () => localeChanged('zh-CN'));
-  expect(host.textContent).toContain(DESKTOP_HARU_SEND_FAILURE);
+  expect(host.textContent).toContain(t(DESKTOP_HARU_SEND_FAILURE));
   await act(async () => localeChanged('en-US'));
-  expect(host.textContent).toContain('Sending failed. Check the conversation in Pilot before trying again.');
+  expect(host.textContent).toContain('Sending failed. Check the conversation in Job Assistant before trying again.');
   await act(async () => update({ ...state, snapshot: { ...state.snapshot!, errorKey: undefined, error: '检查更新' } }));
   expect(host.querySelector('[role="alert"]')!.textContent).toBe('检查更新');
 

@@ -38,7 +38,7 @@ describe('OnboardingChecklist', () => {
     expect(html).toContain('配置 AI');
     expect(html).toContain('创建主简历');
     expect(html).toContain('添加第一条投递');
-    expect(html).toContain('向 Pilot 发出第一条消息');
+    expect(html).toContain('向求职助手发出第一条消息');
   });
 
   it('forwards each completed card click in action order', () => {

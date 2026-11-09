@@ -91,7 +91,7 @@ describe('NativePilotAttachmentDropSurface', () => {
 
     expect(event.defaultPrevented).toBe(true);
     expect(surface.dataset.dragging).toBe('true');
-    expect(surface.textContent).toContain('松开以加入 Pilot 上下文');
+    expect(surface.textContent).toContain('松开以加入求职助手上下文');
   });
 
   it('does not show the full-surface affordance for an observable malformed native payload', () => {
@@ -105,7 +105,7 @@ describe('NativePilotAttachmentDropSurface', () => {
     dragEnter(surface, '{oops');
 
     expect(surface.dataset.dragging).toBeUndefined();
-    expect(surface.textContent).not.toContain('松开以加入 Pilot 上下文');
+    expect(surface.textContent).not.toContain('松开以加入求职助手上下文');
   });
 
   it('does not accept a native attachment while the composer is disabled', () => {

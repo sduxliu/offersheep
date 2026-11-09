@@ -400,13 +400,13 @@ describe('AppShell Pilot mascot integration', () => {
 
     act(() => host.querySelector<HTMLButtonElement>('[data-testid="toggle-mascot-pilot"]')?.click());
     await flush();
-    expect(document.querySelector('[role="dialog"][aria-label="咩咩 轻量对话"]')).not.toBeNull();
+    expect(document.querySelector('[role="dialog"][aria-label="咩咩轻量对话"]')).not.toBeNull();
     expect(host.querySelector('[data-testid="pilot-drawer-chat"]')?.getAttribute('data-conversation-request')).toBe('418');
     expect(host.querySelector('[data-testid="pilot-mascot"]')?.getAttribute('data-notification')).toBeNull();
     const sharedChatOwner = host.querySelector('[data-testid="pilot-drawer-chat"]');
     expect(sharedChatOwner?.getAttribute('data-controller-active')).toBe('true');
 
-    act(() => document.querySelector<HTMLButtonElement>('[aria-label="展开到 Pilot 工作区"]')?.click());
+    act(() => document.querySelector<HTMLButtonElement>('[aria-label="展开到求职助手工作区"]')?.click());
     await flush();
     expect(host.querySelector('[data-testid="pilot-page-chat"]')?.getAttribute('data-conversation-request')).toBe('418');
     expect(host.querySelector('[data-testid="pilot-page-chat"]')?.getAttribute('data-onboarding-focus-token')).toBe('1');
@@ -426,7 +426,7 @@ describe('AppShell Pilot mascot integration', () => {
     expect(sharedChatOwner?.getAttribute('data-offer-id')).toBe('99');
     expect(sharedChatOwner?.getAttribute('data-controller-active')).toBe('true');
 
-    act(() => document.querySelector<HTMLButtonElement>('[aria-label="展开到 Pilot 工作区"]')?.click());
+    act(() => document.querySelector<HTMLButtonElement>('[aria-label="展开到求职助手工作区"]')?.click());
     await flush();
     const pageOwner = host.querySelector('[data-testid="pilot-page-chat"]');
     expect(pageOwner).toBe(sharedChatOwner);

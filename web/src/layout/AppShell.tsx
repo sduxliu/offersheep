@@ -2702,7 +2702,7 @@ function AppShellContent() {
                 ? 'op-pilot-page-host'
                 : 'op-pilot-background-host'}
             data-pilot-surface-host
-            aria-label={contextualPilotRailMode ? 'Pilot' : undefined}
+            aria-label={contextualPilotRailMode ? t('Pilot') : undefined}
             style={contextualPilotRailMode ? { position: 'fixed', inset: '0 0 0 auto', zIndex: 1040 } : undefined}
           >
             <PilotWorkspace

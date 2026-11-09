@@ -182,7 +182,7 @@ describe('ApplicationOutcomeDrawer', () => {
     expect(document.body.textContent).toContain('材料 · 未包含');
 
     const pilotButtons = [...document.body.querySelectorAll<HTMLButtonElement>('button')]
-      .filter((button) => button.textContent?.includes('交给 Pilot 确认'));
+      .filter((button) => button.textContent?.includes('交给求职助手确认'));
     expect(pilotButtons).toHaveLength(2);
     act(() => pilotButtons[0].click());
     await settle();

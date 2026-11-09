@@ -1006,6 +1006,7 @@ const interviews: Record<string, string> = {
   "OfferSheep 提醒：{what}": "OfferSheep reminder: {what}",
   "开启桌面通知后，待办到提醒时间会弹出系统通知（需保持页面打开）。": "Turn on desktop notifications to get a system notification when a to-do reaches its reminder time (keep this page open).",
   "开启桌面通知": "Turn on desktop notifications",
-  "咩咩": "Mimi"
+  "咩咩": "Mimi",
+  "Pilot": "Pilot"
 };
 export default interviews;

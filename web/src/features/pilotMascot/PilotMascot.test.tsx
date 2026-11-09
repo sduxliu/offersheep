@@ -591,7 +591,7 @@ describe('PilotMascot', () => {
       notification: { status: 'success', conversationId: 42 },
     });
     const trigger = container.querySelector<HTMLButtonElement>('button')!;
-    expect(container.textContent).toContain('Pilot 已完成回答，点击查看');
+    expect(container.textContent).toContain('求职助手已完成回答，点击查看');
     act(() => trigger.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
     expect(container.querySelector<HTMLButtonElement>('button[aria-label="放大角色"]')?.disabled).toBe(true);
   });

@@ -1,270 +1,123 @@
-# OfferSheep — 本地求职记录工作台
+# OfferSheep 使用说明
 
-<p align="center"><img src="web/src/features/pilotMascot/assets/sheep-sprite.png" alt="小羊咩咩" width="160"></p>
+<p align="center"><img src="web/src/features/pilotMascot/assets/sheep-sprite.png" alt="小羊咩咩" width="150"></p>
 
-> **声明**：本项目基于 [offercontext/offerPilot](https://github.com/offercontext/offerPilot)（AGPL-3.0）二次开发，
-> 沿用 AGPL-3.0 许可证。修改内容与第三方素材说明见 [NOTICE.md](NOTICE.md)。
+OfferSheep 是一个**本地运行**的求职记录工作台：数据、录音和密钥都留在你自己的电脑上。
+界面里的小羊叫「咩咩」，是可选的桌面陪伴；AI 助手统一叫「求职助手」。
 
-OfferSheep 聚焦三件事：**记录投递并跟踪状态**、**创建待办并按时提醒**、**上传面试录音并用 AI 生成复盘**。
-表单尽量简单；需要批量操作时，可以让 ZCode 等编码 Agent 通过 `oc track` 命令代你填写。
+> **二次开发声明**：本项目基于
+> [offercontext/offerPilot](https://github.com/offercontext/offerPilot)（AGPL-3.0）二次开发，沿用 AGPL-3.0。
+> 修改内容与第三方素材说明见 [NOTICE.md](NOTICE.md)。
+
+## 它能做什么
+
+| 功能 | 说明 | 入口 |
+| --- | --- | --- |
+| **投递记录** | 看板拖动或列表管理投递；详情页标题下可直接切换状态（待投递→已投递→笔试→面试→Offer→结束） | 侧栏「投递」 |
+| **待办与提醒** | 给投递挂待办/日程（面试、笔试、截止、跟进），到点弹系统通知 | 投递详情、侧栏「提醒」 |
+| **面试录音与 AI 复盘** | 上传面试录音（mp3/m4a/wav/webm，≤500 MiB）→ 云端转写 → AI 生成复盘草稿，核对后保存 | 投递详情 → 进展 → 面试复盘 |
+| **求职邮件助手** | 粘贴招聘邮件，自动提取面试/笔试时间和时长，核对后写入日程（详见下文） | 「提醒」页 → 求职邮箱 |
+| **简历与题库** | 简历版本管理、岗位匹配、模拟面试与刷题（上游功能，按需使用） | 侧栏「面试」「素材库」 |
+| **ZCode 代操作** | 让编码 Agent 通过 `oc track` 命令代你记录投递、传录音、生成复盘 | 见文末 |
 
 ## 快速开始
 
 ```bash
-git clone https://github.com/<你的账号>/offersheep.git
+git clone https://github.com/sduxliu/offersheep.git
 cd offersheep
-uv sync
-cd web && npm ci && npm run build && cd ..
-uv run oc start            # 打开 http://localhost:8080
+uv sync                                  # 安装后端依赖（需要 uv）
+cd web && npm ci && npm run build && cd ..   # 构建前端
+uv run oc start                          # 启动，浏览器打开 http://localhost:8080
 ```
 
-数据默认保存在仓库**同级**目录 `../offersheep-data/`（数据库、录音、密钥配置都不进入仓库）；
-可用环境变量 `OFFERPILOT_DATA` 指定其他位置。
+数据默认保存在**仓库同级**目录 `../offersheep-data/`（数据库、录音、密钥配置都在这里，不进仓库）；
+可用环境变量 `OFFERPILOT_DATA` 指定其他位置。卸载只需删除仓库目录和数据目录。
 
-## 配置 AI 与语音识别（密钥只存本机）
+## 首次配置（约 5 分钟）
 
-| 用途 | 位置 | 推荐配置 |
-| --- | --- | --- |
-| 文本 AI（复盘、对话） | 设置 → AI 与模型 | DeepSeek：`https://api.deepseek.com/v1`，模型 `deepseek-flash`；如需图片识别，打开“支持图片输入”并用“测试图片输入”验证 |
-| 面试录音转写 | 设置 → 语音 | 硅基流动：`https://api.siliconflow.cn/v1`，模型 `FunAudioLLM/SenseVoiceSmall` |
+1. **文本 AI**（复盘、对话必需）：设置 → AI 与模型 → 添加供应商
+   `https://api.deepseek.com/v1` + 你的 DeepSeek Key，模型 `deepseek-flash`；
+   需要在对话里发图片时，打开「支持图片输入」并点「测试图片输入」验证。
+2. **录音转写**（面试复盘必需）：设置 → 语音 → 填写
+   `https://api.siliconflow.cn/v1` + 硅基流动 Key，模型 `FunAudioLLM/SenseVoiceSmall`，点「测试连接」。
+   建议安装 [ffmpeg](https://ffmpeg.org/)：超过 25 MiB 的长录音会按 10 分钟自动分片转写。
+3. 密钥只保存在本机数据目录的 `config.json`，界面只显示掩码，不会上传。
 
-长录音建议安装 [ffmpeg](https://ffmpeg.org/)：有 ffmpeg 时会按 10 分钟自动分片转写。
+> DeepSeek 的 `response_format` 不支持 `json_schema`（`text`/`json_object` 两种），
+> 请保持「支持 JSON Schema 输出」开关关闭；复盘草稿会自动改走 DeepSeek 工具调用的
+> strict 模式，由服务端按 JSON Schema 约束输出，失败时回退普通解析。
 
-> DeepSeek 的 `response_format` 不支持 `json_schema`，请保持“支持 JSON Schema 输出”关闭；
-> 复盘草稿会自动走 DeepSeek Tool Calls 的 strict 模式，由服务端按 JSON Schema 约束输出。
+## 三个核心流程怎么用
 
-## 三个核心流程
+### 1. 记一条投递
 
-1. **投递**：看板或列表新增投递；详情页标题下可直接切换状态（结束投递需填写原因）。
-2. **待办与提醒**：在投递详情添加日程/待办并设置提醒时间；在“提醒”页开启桌面通知后，到点会弹出系统通知。
-3. **面试复盘**：新建复盘 → 绑定面试事件 → 上传录音 → 转写 → 点「AI 生成复盘」，核对后保存；
-   可一键创建“3 天后跟进结果”的提醒。
+- 侧栏「投递」→「添加投递」，填公司、岗位（其余选填）。
+- 需要改状态：投递详情页标题下方直接切换；拖动看板卡片也可以。
+- 建议投完就建一条「7 天后跟进」的待办：详情页 → 添加日程，类型选「自定义」，设提醒时间。
+
+### 2. 待办与提醒
+
+- 提醒时间到点，且页面保持打开时，会弹**系统通知**（首次需在「提醒」页点「开启桌面通知」）。
+- 「提醒」页汇总今天该做的事：待办、逾期投递、待写复盘的面试、Offer 截止。
+
+### 3. 面试录音复盘
+
+1. 先在投递详情登记面试日程（记录时间、轮次、会议链接）；
+2. 新建复盘并**绑定该面试事件**，面板里上传录音 → 等待转写（有进度条）；
+3. 点「AI 生成复盘」：约 10 秒后，总结、被问问题、表现反思、薄弱点会填进表单；
+4. **核对修改后**再点「保存复盘」——AI 草稿未经确认不会入库；
+5. 点「3天后提醒跟进」一键创建跟进提醒。
+
+## 求职邮件助手
+
+**作用**：把招聘相关的邮件变成待你确认的日程建议，省去手动誊抄面试时间。
+它**不会**自动改投递状态、不会发邮件、不会未经确认写入任何日程。
+
+两种用法：
+
+- **粘贴邮件（开箱即用，推荐先试这个）**：「提醒」页 → 求职邮箱 →「手动导入」，
+  把邮件正文粘贴进去（≤100KB）。系统用本地规则识别**面试/笔试**邀约的时间和时长，
+  生成一条待审建议；核对后在「今日 → 提醒」里确认，才会写入日程。
+  识别目前是**本地规则**（关键词 + 时间解析），复杂措辞、Offer、拒信、改期会被标记为
+  「需人工处理」而不会自动建日程。
+- **连接 QQ 邮箱（实验功能，默认关闭）**：自动拉取 `imap.qq.com` 的邮件并走同一套
+  识别-审阅流程。开启需要满足较多安全条件（本机启动加
+  `--enable-local-mail-setup`、系统凭据库可用、仅限本机页面操作、授权码只存系统凭据库），
+  每天最多读 100 封、只认含「面试/笔试/测评/offer」等关键词的邮件，断开即删除本机凭据。
+  详见产品说明书「求职邮件助手（实验功能）」一节。**建议先用手动粘贴**，够用且零风险。
+
+隐私：粘贴或拉取的邮件只在本机保存有限摘要（90 天后清除待审证据），当前识别不经过任何 AI 服务商。
 
 ## 让 ZCode 帮你操作
+
+把 [`skills/offersheep/SKILL.md`](skills/offersheep/SKILL.md) 放进 ZCode 技能目录（如 `~/.zcode/skills/offersheep/`），
+然后就可以直接对 ZCode 说「我投了 xx 公司的 xx 岗」「帮我把这场面试的录音复盘一下」。
+底层命令：
 
 ```bash
 uv run oc track add-app --company 星澜智能 --position 后端开发 --notes "Boss 直聘"
 uv run oc track add-interview 1 --at "2026-11-12 14:00" --round 一面
-uv run oc track upload 2 ./面试录音.m4a && uv run oc track transcribe 1
-uv run oc track review-draft 1          # 只生成草稿；确认后加 --save 写入复盘
-uv run oc track reminders               # 今日需要跟进的事项
+uv run oc track upload <日程ID> ./面试录音.m4a && uv run oc track transcribe <录音ID>
+uv run oc track review-draft <录音ID>            # 只生成草稿；确认后加 --save
+uv run oc track reminders                        # 今日需要跟进的事项
 ```
 
-把 [`skills/offersheep/SKILL.md`](skills/offersheep/SKILL.md) 放进 ZCode 的技能目录（如 `~/.zcode/skills/offersheep/`），
-ZCode 就能按其中的流程代你记录与跟进。
+## 常见问题
+
+| 现象 | 处理 |
+| --- | --- |
+| 页面打不开 | 确认 `uv run oc start` 在运行；端口默认 8080，可用 `--port` 改 |
+| 转写报「语音识别服务未配置」 | 设置 → 语音 里填 Key 并保存，再回到录音面板点「开始转写」 |
+| AI 复盘报「AI 服务不可用」 | 设置 → AI 与模型 里确认供应商已启用、连接测试通过 |
+| 录音转写失败 | 看面板上的错误码；大文件未装 ffmpeg 时可能超出服务商单文件限制 |
+| 通知不弹 | 「提醒」页确认已开启桌面通知；页面需保持打开 |
 
 ---
 
-> 以下为上游 offerPilot 的原始说明，保留以便参考（其中“Haru”角色已在本项目中替换为小羊）。
+# 附：上游 offerPilot 原始说明
+
+> 以下为上游原文，保留以便对照（其中 Haru 角色已替换为小羊咩咩，Pilot 助手改称求职助手）。
 
 # OfferPilot — 开源、本地优先的求职 Agent
 
 [简体中文](README.md) | [English](README.en.md)
-
-**帮你准备下一场面试，也让你看懂 Agent 怎样把事情做成。**
-
-OfferPilot 由 offercontext 维护，把投递、简历、面试与 Offer 放进同一个工作台。
-内置 Pilot 结合你保存的求职资料查询信息、起草内容、调用工具，并在你确认后更新关键求职记录。
-也支持通过 MCP 接入你自己的本地 Agent，沿用它的模型与对话环境，调用 OfferPilot 中已授权的求职资料和工具。
-它不会自动投递，也不会替你联系招聘方。
-
-想研究 Agent 的 AI builder，也可以从同一个求职场景出发，沿着图解、小实验与源码，
-理解工具调用、上下文、写入确认和执行控制。
-
-[Windows 未签名测试版下载](https://github.com/offercontext/offerPilot/releases/tag/v0.1.0-desktop.1)｜[Docker / 源码启动](#快速开始)｜[看懂 Agent](#不仅能用也可以拆开学)｜[用户指南](docs/product-manual/产品说明书.md)
-
-Windows 安装包为实验性预发行版，请先阅读下方[测试版边界](#快速开始)。基础投递记录无需配置 AI；
-使用 AI 时需连接自己的模型服务，相关资料可能离开设备并产生服务商费用。
-
-## 先看它怎样记下一场面试
-
-下面复用一次真实操作的素材：2026-10-08，在固定源码基线 `c0a447bb` 上使用隔离的虚构数据与真实模型采集，
-不代表当前 Windows 测试版的完整验收。公司、岗位与日期均为演示案例，不是你的待办。
-
-> 请为云岚数据的测试开发岗位新增面试日程：2026 年 10 月 15 日，北京时间下午 3 点（UTC+8），线上，时长 60 分钟。
-
-**查询已有投递 → 提出保存建议 → 你核对并确认 → 程序保存 → 在日历核对结果。**
-
-1. Pilot 借助工具查找对应投递，结合返回资料提出面试安排。
-2. 确认卡展示准备保存的内容；此时尚未新增日程。
-3. 确认后，程序保存同一场面试，再到日历核对公司、岗位和时间。此次操作没有向招聘方发送通知。
-
-![实际待确认卡：云岚数据测试开发、10 月 15 日 15:00、线上、60 分钟](docs/learn/images/runtime-20261008/05-interview-pending.jpg)
-
-![实际保存后的日历：同一场云岚数据测试开发面试，15:00–16:00](docs/learn/images/runtime-20261008/08-calendar-verified.jpg)
-
-AI 说“记好了”还不够，记录要真正保存，内容也要核对正确。
-[查看完整过程](docs/learn/01-record-an-interview.md)与[素材、版本及验证范围](docs/learn/images/runtime-20261008/README.md)。
-
-## 快速开始
-
-Windows 用户可先阅读下方测试版边界；也可以选择 Docker 或源码方式启动，完成其中一种即可：
-
-- Docker 方式需要 Git 和可用的 Docker 环境，不必单独安装 Python 或 Node.js。
-- 源码方式需要 Git、uv、Python 和 Node.js/npm。项目声明 Python 最低版本为 3.10；当前 Docker 构建使用 Python 3.12 和 Node.js 20，这些构建版本不等于源码运行的最低要求。
-
-### Windows x64 桌面测试版（未签名）
-
-[下载 v0.1.0-desktop.1 测试版](https://github.com/offercontext/offerPilot/releases/tag/v0.1.0-desktop.1)。
-在 Release 的 Assets 中下载 `OfferPilot-Desktop-0.1.0-desktop.1-win-x64-setup.exe`
-及同名 `.sha256` 文件；不要把自动生成的 Source code 压缩包当作安装器。
-
-1. 这是 Windows x64 的实验性预发行版，不是稳定生产版本；无需另装 Python、Node.js 或 Docker。
-2. 安装前用 PowerShell 执行 `Get-FileHash .\OfferPilot-Desktop-0.1.0-desktop.1-win-x64-setup.exe -Algorithm SHA256`，核对 Release 与 `.sha256` 中的摘要。哈希只能校验文件完整性，不能替代发布者签名。
-3. 核对来源和哈希后，双击安装器，按向导选择安装目录，再从桌面快捷方式启动。未签名安装器可能触发 Windows SmartScreen／未知发布者提示；若浏览器、Windows 或安全软件阻止下载或运行，请停止并报告，不关闭防护或绕过警告。
-4. 初次使用请先用测试数据。安装新版前完全退出应用并备份 `%APPDATA%\OfferPilot Desktop\`；桌面工作区与源码版的 `~/.offerpilot` 独立，不自动迁移，尚不保证升级／降级兼容。卸载默认保留应用数据，不等于已有可靠备份。
-
-此测试版未启用正式更新渠道，应用内检查／下载／安装更新不可用；后续测试版请回到 Releases 手动获取。
-AI 功能仍需自行配置模型服务，可能发送相关资料并产生费用。详细构建来源、校验值、验证范围见 Release；工程边界见[桌面验证说明](docs/architecture/desktop-validation.md)和[更新说明](docs/architecture/desktop-updates.md)。
-
-### Docker
-
-```bash
-git clone https://github.com/offercontext/offerPilot.git offerpilot
-cd offerpilot
-
-docker build -t offerpilot .
-docker run --rm -p 127.0.0.1:8080:8080 -v offerpilot-data:/data offerpilot
-```
-
-打开 `http://localhost:8080`。
-
-### 从源码启动
-
-```bash
-git clone https://github.com/offercontext/offerPilot.git offerpilot
-cd offerpilot
-uv sync
-cd web
-npm ci
-npm run build
-cd ..
-uv run oc start
-```
-
-打开 `http://localhost:8080`。上述两种方式均以本机访问为默认用途。
-
-### 数据保存在哪里
-
-| 启动方式 | 默认数据位置 |
-| --- | --- |
-| Windows 桌面测试版 | `%APPDATA%\OfferPilot Desktop\data`（独立工作区） |
-| 源码启动 | 用户主目录下的 `~/.offerpilot`，可通过 `OFFERPILOT_DATA` 调整 |
-| 上述 Docker 命令 | `offerpilot-data` 数据卷，挂载到容器内的 `/data` |
-
-### 第一次使用
-
-先记录一个岗位，不必先配置 AI。打开投递看板，添加公司和岗位，再进入详情保存岗位描述。
-
-需要 AI 辅助时，再到“设置 → AI 与模型 → 配置 AI”填写模型服务信息，测试连接、应用到 Provider 列表，最后点击页面顶部“保存”。完整步骤见[第一次使用指南](docs/product-manual/产品说明书.md#start)。
-
-## 使用自己的本地 Agent（MCP）
-
-在 DSH、Claude Code 或其他支持本地 stdio MCP 的 Agent 中，读取已授权的求职资料、
-提出维护建议，再由你在独立可信终端确认保存。模型和对话由你自己的 Agent 管理，
-这条链路不调用 OfferPilot 内置模型；若使用云端模型，资料仍可能外发并产生费用。
-
-连接默认只读所选投递及事件，其他能力需显式授权；简历和 Knowledge 读取是独立的全局授权。
-写提案不会直接保存，MCP 不提供模型自调用的确认工具。
-
-源码版安装、授权、客户端配置与撤销见[完整接入说明](docs/architecture/external-agent-mcp.md)；
-DSH 也可使用[插件包](plugins/dsh-offerpilot/README.md)，不要与配置文件接入方式同时启用。
-此处说明源码版能力，不代表上方 Windows 测试安装包包含 MCP。
-
-## 求职过程中，可以怎样使用它
-
-| 功能 | 具体用途 |
-| --- | --- |
-| 投递管理 | 按公司、岗位和阶段跟进求职进度，关联岗位描述与面试安排 |
-| 简历与材料准备 | 管理简历版本，结合岗位要求生成并审阅材料建议 |
-| 面试准备与模拟 | 根据简历和岗位描述练习问答，查看 AI 追问与反馈 |
-| 面试复盘 | 保存面试记录，选择并确认需要继续练习的重点 |
-| Offer 对比与谈薪 | 比较已填写的薪酬、福利和答复期限，准备谈薪沟通 |
-| Pilot 求职 Agent | 结合资料查询、分析和起草内容，调用工具，并在确认后更新关键记录 |
-
-本仓库介绍本地部署版本。在线服务可访问
-[offerContext Hub](https://hub.offercontext.cn)；
-其功能与数据处理方式以站内说明为准，不默认与本地版本一致或互通。
-
-## 真实界面
-
-以下为本地部署开发版的实际界面，截图更新于 2026 年 9 月。不同版本的功能与界面可能存在差异，截图对应版本见[用户指南](docs/product-manual/产品说明书.md)。
-
-### 1. 跟进每个岗位的投递进度
-
-在同一看板中查看公司、岗位与当前阶段，按待投递、已投递、笔试、面试、Offer 和结束整理进展。
-
-![投递看板：按公司、岗位和阶段跟进](docs/product-manual/screenshots/R03-05-page-create-saved.png)
-
-### 2. 为目标岗位准备投递材料
-
-在投递详情中选择简历和本次使用的岗位描述（JD），进入材料工作区生成并审阅建议。确认后创建岗位简历版本，保留基础简历。
-
-![投递准备：对照岗位与简历审阅 AI 生成的优化建议草稿](docs/product-manual/screenshots/04-03-material-generated.png)
-
-### 3. 结合求职资料使用 AI 助手
-
-在同一个会话中查询投递进展、整理岗位资料或起草下一步计划，并对照右侧参考资料核对建议。
-
-![完整 Pilot 页面：左侧会话列表、中间对话与新建投递确认卡、右侧参考资料及底部输入区](docs/product-manual/screenshots/R03-02-pilot-create-confirm.png)
-
-### 4. 面试前练习，面试后整理经验
-
-从已安排的面试进入练习，或直接使用“快速模拟”，选择并核对本次岗位资料与简历后开始问答。独立练习不要求先创建真实投递或日程。
-
-![新版文字模拟面试：沿用筱哲与远帆科技案例，查看中文提问依据并回答 AI 追问](docs/product-manual/screenshots/R08-studio-evidence.png)
-
-### 5. 比较 Offer 条件，准备谈薪
-
-录入 Offer 后可以比较已知薪酬条件、补充自定义比较维度，并进入谈薪准备或谈薪教练，整理下一次沟通的重点。
-
-![Offer 横向对比：查看等宽摘要卡片、年薪与回复时间差，并逐项核对薪酬、福利和截止日](docs/product-manual/screenshots/R08-offer-comparison-polished.png)
-
-## Haru 与 Pilot
-
-Pilot 是负责对话与任务协作的内置 Agent；Haru 是桌面宽屏上的可选角色入口。
-喜欢角色交互，可以从 Haru 进入；喜欢清爽界面，也可以隐藏它，继续使用 Pilot。
-Haru 采用 Live2D 官方样例角色，并非 OfferPilot 原创角色，归属与使用条件见[许可证](#许可证)。
-
-## 不仅能用，也可以拆开学
-
-求职者可以直接使用工作台，不需要先学习 Harness。AI builder 也可以只研究一个具体问题：
-**为什么同一条面试安排，重复确认也不该保存两遍？**
-
-- **先看懂**：从[一场面试怎样被记录](docs/learn/01-record-an-interview.md)开始，再按[四篇短路线](docs/learn/README.md)看清资料、模型、工具与人的分工。无需安装项目或写代码。
-- **动手试**：运行[只用 Python 标准库的小实验](docs/learn/examples/README.md)，观察“确认前 0 条 → 确认后 1 条 → 重复确认仍为 1 条”。实验使用模拟模型，不需要模型密钥，不是模型能力评测。
-- **拆开实现**：按兴趣阅读[Harness 源码导读](docs/learn/advanced/README.md)，追踪 Agent Loop、上下文、写入确认、取消与恢复、运行记录和验证。
-
-学习材料以具体源码基线与验证记录为依据，尚未开展读者试读；它是一条实战阅读与实验路线，不保证读完就能独立实现完整系统。
-
-## 参与项目
-
-发现问题或有改进建议，欢迎[提交 Issue](https://github.com/offercontext/offerPilot/issues)。
-想贡献改动，请先阅读[贡献指南](CONTRIBUTING.md)，说明目标、修改范围与实际验证结果。
-
-## 隐私、费用与使用限制
-
-- 本地部署将业务数据保存在本地工作区。使用 AI 功能时，相关资料会发送给你配置的模型服务；本地存储不代表所有 AI 处理都在本地完成。模型调用可能产生服务商费用。
-- 模拟面试录音只存在于当前页面，不上传、不持久化；离线 Whisper 模型仅在你主动点击后从 Hugging Face 下载到浏览器缓存。
-- Pilot 对关键求职记录的修改默认需要用户确认；请核对系统确认卡后再执行。OfferPilot 不自动向招聘方投递或发送消息。
-- AI 输出可能包含错误。采用前请核对经历、数字、日期和承诺；是否投递、接受 Offer 或如何谈薪，仍由你决定。
-
-详细操作与问题排查见[用户指南](docs/product-manual/产品说明书.md#s12)。
-
-## 开发验证
-
-源码开发可使用 `uv run oc eval` 执行隔离 Harness 评估、重复比较及审核包生成，以及 `scripts/select_tests.py` 生成和执行增量测试计划。配置、证据边界与命令见 [核心操作指南](docs/architecture/harness-core-operations.md)；[P0 开发指南](docs/architecture/harness-p0-development.md)保留旧入口。真实模型运行须提供 provider profile 和费用 grant；这些检查不替代完整发布门禁。
-
-## 许可证
-
-[AGPLv3](LICENSE)
-
-### 第三方角色与运行时
-
-桌面宽屏的 Pilot 看板娘使用 Live2D 官方样例角色 Haru 受付版与 Cubism Core。相关角色、模型数据及运行时版权归 Live2D Inc. 所有，不包含在 OfferPilot 的 AGPLv3 授权中；使用与分发需同时遵守 [Live2D 样例模型条款](https://www.live2d.com/eula/live2d-sample-model-terms_en.html) 与 [Live2D SDK 许可](https://www.live2d.com/en/sdk/license/)。
-
-> This content uses sample data owned and copyrighted by Live2D Inc. The sample data are utilized in accordance with terms and conditions set by Live2D Inc. This content itself is created at the author’s sole discretion.
-
-### 离线语音模型与运行时
-
-可选离线转写使用 Apache-2.0 许可的 `@huggingface/transformers`、ONNX Runtime Web 与 [`onnx-community/whisper-small`](https://huggingface.co/onnx-community/whisper-small)。模型固定到 revision `461d552a09349d5d0d0779b40dd79800eaa3e35a`，不会提交到 Git 仓库或打入模型权重；用户主动下载后仅缓存在当前浏览器。详细说明见 [`web/public/offline-whisper-NOTICE.md`](web/public/offline-whisper-NOTICE.md)。

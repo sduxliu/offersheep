@@ -26,7 +26,7 @@ from .models import (CompanionChatEvidence, CompanionEvent, CompanionParticipati
 from .repository import CompanionConflict, TEMPLATES
 
 SOURCE_KEY = 'companion_fact_read_v1'
-DISABLED_NOTICE = '陪伴已关闭，当前已恢复普通 Pilot。'
+DISABLED_NOTICE = '陪伴已关闭，当前已恢复普通求职助手。'
 _OBJECTS = {'纸小船': 'paper_boat', '小船': 'paper_boat', '纸船': 'paper_boat',
             '纸星星': 'paper_stars', '星星': 'paper_stars', '云朵': 'cloud_catalog'}
 _NAMES = {'paper_boat': '纸小船', 'paper_stars': '纸星星', 'cloud_catalog': '云朵'}

@@ -302,7 +302,7 @@ def test_shared_chat_runtime_keeps_life_before_request_and_out_of_work_and_memor
         assert not any("以下是带来源的角色日常参考数据" in message.content for message in requests[-1][0])
         assert not any(PERSONA_VERSION in message.content for message in requests[-1][0]
                        if message.role == "system")
-        assert any("当前使用普通 Pilot" in message.content for message in requests[-1][0])
+        assert any("当前使用普通求职助手" in message.content for message in requests[-1][0])
     with sqlite3.connect(tmp_path / "data.db") as connection:
         assert connection.execute("SELECT count(*) FROM confirmed_memories").fetchone()[0] == 0
         # Only the authored app-open event exists. Model dialogue never advances life.

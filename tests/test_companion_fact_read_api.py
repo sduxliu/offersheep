@@ -174,7 +174,7 @@ def test_frozen_fact_disabled_before_execution_reports_mode_without_persona_leak
             status = _wait_for_status(client, response.json()['turn_id'], terminal={'completed', 'failed'})
             assert status['state'] == 'completed', status
         elif endpoint.endswith('/stream'):
-            assert '陪伴已关闭，当前已恢复普通 Pilot。' in response.text
+            assert '陪伴已关闭，当前已恢复普通求职助手。' in response.text
         else:
             assert response.status_code == 200, response.text
     assert switched and model.calls == 0 and not model.messages
@@ -182,7 +182,7 @@ def test_frozen_fact_disabled_before_execution_reports_mode_without_persona_leak
     with sessions() as session:
         assert len(session.scalars(select(CompanionFactReadReceipt)).all()) == 1
         assistants = session.scalars(select(ChatMessage).where(ChatMessage.role == 'assistant')).all()
-        assert len(assistants) == 1 and assistants[0].content == '陪伴已关闭，当前已恢复普通 Pilot。'
+        assert len(assistants) == 1 and assistants[0].content == '陪伴已关闭，当前已恢复普通求职助手。'
 
 
 @pytest.mark.parametrize('endpoint', ENDPOINTS)

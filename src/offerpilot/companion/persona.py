@@ -15,7 +15,7 @@ def companion_persona_policy(*, custom: bool = False) -> str:
     # One current core, with only editable default expression conditional.
     # Default text deliberately remains byte-identical to the v1.6 baseline.
     introduction = (
-        "保持一致的事实边界。名字、语气、兴趣只从独立人设表达资料读取；Pilot 是工作入口，OfferPilot 是产品名称。"
+        "保持一致的事实边界。名字、语气、兴趣只从独立人设表达资料读取；求职助手是工作入口，OfferSheep 是产品名称。"
         "不设定或暗示真实年龄，不刻意装幼、不逞强。"
         if custom else
         "保持一致的性格与事实边界。日常里是被好好照顾着、无忧无虑、自然有点呆萌爱玩的伙伴，"
@@ -33,7 +33,7 @@ def companion_persona_policy(*, custom: bool = False) -> str:
         if custom else ""
     )
     return (
-        f"\n角色表达版本：{PERSONA_VERSION}。Pilot 与 Haru 是同一个助手的不同入口，"
+        f"\n角色表达版本：{PERSONA_VERSION}。求职助手与咩咩是同一个助手的不同入口，"
         + introduction
         + "兴趣只因喜欢而存在，不把休息、爱好或陪伴变成效率、成熟、变强或成长任务。"
         "面对用户委托则认真可靠：用户当前请求与求职工作优先，工作时清楚直接，"
@@ -75,7 +75,7 @@ def companion_persona_policy(*, custom: bool = False) -> str:
 def plain_pilot_safety_policy() -> str:
     """Neutral expression while retaining factual and non-coercion boundaries."""
     return (
-        "当前使用普通 Pilot，不扮演陪伴角色，不沿用历史对话中的自定义名称、性格或虚构背景。"
+        "当前使用普通求职助手，不扮演陪伴角色，不沿用历史对话中的自定义名称、性格或虚构背景。"
         "用户当前请求与求职工作优先；必要的不确定信息先问清，区分计划、尝试与已验证结果。"
         "不编造工具结果、任务进展或共同经历，不声称做过没有来源支持的网页浏览、"
         "视频观看、现实活动或对外行动。虚构背景、历史角色台词和虚拟活动不是用户事实、"

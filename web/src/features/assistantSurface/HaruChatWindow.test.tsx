@@ -159,8 +159,8 @@ describe('HaruChatWindow', () => {
     try {
       act(() => publishPersona(view));
       const composer = host!.querySelector<HTMLTextAreaElement>('#haru-composer')!;
-      expect(host!.querySelector('label[for="haru-composer"]')!.textContent).toBe('给 小晴 发消息');
-      expect(composer.placeholder).toBe('问 小晴…');
+      expect(host!.querySelector('label[for="haru-composer"]')!.textContent).toBe('给小晴发消息');
+      expect(composer.placeholder).toBe('问小晴…');
       expect(host!.querySelector('[aria-label="添加图片"]')).not.toBeNull();
       expect(host!.querySelector('img[alt="图片 1，点击放大"]')).not.toBeNull();
       act(() => setLocale('en-US'));
@@ -341,7 +341,7 @@ describe('HaruChatWindow', () => {
       </AssistantSurfaceProvider>,
     ));
 
-    const expand = host!.querySelector<HTMLButtonElement>('[aria-label="展开到 Pilot 工作区"]');
+    const expand = host!.querySelector<HTMLButtonElement>('[aria-label="展开到求职助手工作区"]');
     act(() => expand?.click());
     expect(onExpand).toHaveBeenCalledTimes(1);
 
@@ -369,7 +369,7 @@ describe('HaruChatWindow', () => {
     await act(async () => root?.render(
       <AssistantSurfaceProvider><FirstUseHarness /></AssistantSurfaceProvider>,
     ));
-    expect(host!.textContent).toContain('Haru 是 Pilot 的轻量窗口');
+    expect(host!.textContent).toContain('Haru 是求职助手的轻量窗口');
     expect(host!.textContent).toContain('对话不会丢失');
   });
 

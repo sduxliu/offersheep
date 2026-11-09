@@ -81,9 +81,34 @@ export function getLocale(): Locale { return locale; }
 export function useLocale() {
   return useSyncExternalStore(subscribeLocale, getLocale, () => 'zh-CN' as Locale);
 }
+/** OfferSheep：上游 offerPilot 把 AI 助手称为 Pilot，界面统一显示为「求职助手」。 */
+const ASSISTANT_NAME: Record<Locale, string> = { 'zh-CN': '求职助手', 'en-US': 'Job Assistant' };
+const CJK = /[\u3000-\u303f\u3400-\u9fff\uff00-\uffef]/;
+
+/**
+ * 把文案模板中匹配 `core`（正则片段）的部分替换为 replacement；
+ * 替换词与相邻字符都是中文时，去掉两者之间多余的半角空格（如「到 Pilot。」→「到求职助手。」）。
+ */
+export function replaceCjkAware(text: string, core: string, replacement: string): string {
+  const cjkStart = CJK.test(replacement.charAt(0));
+  const cjkEnd = CJK.test(replacement.charAt(replacement.length - 1));
+  return text.replace(new RegExp(`( ?)${core}( ?)`, 'g'), (match: string, lead: string, trail: string, offset: number, whole: string) => {
+    const before = whole.charAt(offset - 1);
+    const after = whole.charAt(offset + match.length);
+    const keepLead = lead && !(cjkStart && CJK.test(before)) ? ' ' : '';
+    const keepTrail = trail && !(cjkEnd && CJK.test(after)) ? ' ' : '';
+    return `${keepLead}${replacement}${keepTrail}`;
+  });
+}
+
+/** 把文案模板里独立的「Pilot」换成当前语言的助手名（不影响 OfferPilot 等组合词）。 */
+export function brandAssistant(text: string, target: Locale = locale): string {
+  return replaceCjkAware(text, '\\bPilot\\b', ASSISTANT_NAME[target]);
+}
+
 /** Translate only authored UI copy. Never pass user documents or AI replies here. */
 export function t(source: string, values?: Record<string, string | number | boolean | null | undefined>, context?: string): string {
-  const message = locale === 'en-US' ? english[context ?? source] ?? english[source] ?? source : source;
+  const message = brandAssistant(locale === 'en-US' ? english[context ?? source] ?? english[source] ?? source : source);
   return values ? message.replace(/\{(\w+)\}/g, (match, key: string) => Object.prototype.hasOwnProperty.call(values, key) ? String(values[key]) : match) : message;
 }
 /** An authored error retains its key so a mounted error state can change language. */

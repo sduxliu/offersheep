@@ -151,7 +151,7 @@ describe('OfferNegotiationDrawer', () => {
     service.confirm.mockClear();
 
     const handoff = host?.querySelector<HTMLButtonElement>('[data-testid="offer-negotiation-open-pilot"]');
-    expect(handoff?.textContent).toContain('和 Pilot 深聊这份 Offer');
+    expect(handoff?.textContent).toContain('和求职助手深聊这份 Offer');
     expect(host?.textContent).toContain('消息由你决定是否发送');
     await act(async () => handoff?.click());
 

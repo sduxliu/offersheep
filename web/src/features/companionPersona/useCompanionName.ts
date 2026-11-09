@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import { t } from '@/i18n';
+import { replaceCjkAware, t } from '@/i18n';
 import { getPersona, type PersonaView } from '@/services/persona';
 import { getCompanion } from '@/services/companion';
 import type { CompanionSnapshot } from '@/features/companionLife/contracts';
@@ -82,5 +82,5 @@ export function useCompanionName() {
 }
 /** Apply only to authored UI copy, never user messages, tool IDs or product branding. */
 export function companionText(authoredText: string, displayName: string): string {
-  return authoredText.replace(/Haru|咩咩/g, () => displayName);
+  return replaceCjkAware(authoredText, '(?:Haru|咩咩)', displayName);
 }

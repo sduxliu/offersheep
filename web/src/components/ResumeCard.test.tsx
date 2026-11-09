@@ -62,7 +62,7 @@ describe('ResumeCard v0.1', () => {
 
     expect(markup).toContain('后端主简历');
     expect(markup).toContain('主简历');
-    expect(markup).toContain('Pilot 对话');
+    expect(markup).toContain('求职助手对话');
     expect(markup).toContain('67%');
     expect(markup).toContain('求职意向');
     expect(markup).toContain('项目经历');
