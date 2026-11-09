@@ -1,6 +1,6 @@
 ---
 name: offersheep
-description: 用 OfferSheep 帮用户记录与跟踪求职：新增投递、更新投递状态、创建待办和提醒、登记面试、上传面试录音并转写、用 AI 生成面试复盘。当用户说“记一条投递”“我投了某公司”“更新投递状态”“加个待办/提醒”“约了面试”“上传面试录音”“帮我复盘这场面试”“今天有什么要跟进”时使用。
+description: 用 OfferSheep 帮用户记录与跟踪求职：新增投递、更新投递状态、创建待办和提醒、登记面试、上传面试录音并转写、用 AI 生成面试复盘、导入求职邮件。当用户说“记一条投递”“我投了某公司”“更新投递状态”“加个待办/提醒”“约了面试”“上传面试录音”“帮我复盘这场面试”“今天有什么要跟进”“我收到一封面试邀请邮件”时使用。
 ---
 
 # OfferSheep 求职记录操作手册
@@ -29,6 +29,8 @@ curl -s http://127.0.0.1:8080/api/health
 | 看待办 | `uv run oc track todos [--app <投递ID>] [--pending]` |
 | 完成待办/面试 | `uv run oc track done <日程ID>` |
 | 今日提醒 | `uv run oc track reminders` |
+| 导入求职邮件 | `uv run oc track mail-import <邮件文本文件> [--subject 主题] [--received "2026-11-08 10:00"]` |
+| 查看邮件建议 | `uv run oc track mail-suggestions`（待审日程建议，需用户在界面「提醒」页核对后才写入） |
 | 上传录音 | `uv run oc track upload <面试日程ID> <录音文件路径>` |
 | 转写录音 | `uv run oc track transcribe <录音ID>`（默认等待完成） |
 | 查看转写 | `uv run oc track recording <录音ID>` |
@@ -42,6 +44,10 @@ curl -s http://127.0.0.1:8080/api/health
 **投完简历**：`add-app` 记录（备注写渠道），再 `add-todo` 一条 7 天后的「跟进投递进度」。
 
 **收到面试邀请**：`set-status <ID> interview`，再 `add-interview` 登记时间与会议链接（默认提前 1 天提醒）。
+若用户给的是邮件文本（或让 AI 去 Boss/邮箱复制邀请内容），可先 `mail-import` 生成待审建议，
+提醒用户到「提醒」页核对确认——不要替用户确认邮件建议。
+
+**从 Boss 等平台投递后**：让 AI 先 `apps` 查重，再 `add-app` 记录（备注写渠道和 JD 链接），`add-todo` 一条 7 天后的「跟进投递进度」。
 
 **面试结束后**：
 1. `upload` 录音，`transcribe` 转写；

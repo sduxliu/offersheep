@@ -68,6 +68,21 @@ def test_todo_with_reminder_and_done(monkeypatch, tmp_path):
     assert _run("todos", "--pending") == []
 
 
+def test_mail_import_creates_pending_suggestion(monkeypatch, tmp_path):
+    _wire(monkeypatch, tmp_path)
+    mail = tmp_path / "invite.txt"
+    mail.write_text(
+        "感谢您投递云岚数据的后端开发岗位。\n面试时间：2026年11月12日 14:00\n面试时长：60分钟\n",
+        encoding="utf-8",
+    )
+    result = _run("mail-import", str(mail), "--subject", "一面邀请")
+    suggestion = result["items"][0]
+    assert suggestion["status"] == "pending" and suggestion["action"] == "create_event"
+
+    listed = _run("mail-suggestions")
+    assert [item["id"] for item in listed["items"]] == [suggestion["id"]]
+
+
 def test_parse_local_time_adds_offset():
     value = agent_cli.parse_local_time("2026-11-20 10:00")
     assert value.startswith("2026-11-20T10:00:00") and ("+" in value[19:] or "-" in value[19:])

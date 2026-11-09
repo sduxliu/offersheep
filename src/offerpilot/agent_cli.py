@@ -191,6 +191,29 @@ def reminders(timezone: str = typer.Option("Asia/Shanghai", help="显示时区")
     _emit(_request("GET", "/reminders/candidates", params={"timezone": timezone}))
 
 
+@track_app.command("mail-import")
+def mail_import(
+    file: Path = typer.Argument(..., exists=True, dir_okay=False, help="邮件文本文件（≤100KB，UTF-8）"),
+    subject: str = typer.Option("手动提供的邮件", help="邮件主题"),
+    received: Optional[str] = typer.Option(None, help="收到时间，如 2026-11-08 10:00"),
+) -> None:
+    """导入一封求职邮件：本地规则提取面试/笔试后生成待审建议，不自动写入日程。"""
+    text = file.read_text(encoding="utf-8", errors="replace")
+    moment = parse_local_time(received) if received else datetime.now().astimezone().isoformat(timespec="seconds")
+    payload: dict[str, Any] = {"subject": subject, "body_text": text, "received_at": moment}
+    _emit(_request("POST", "/job-mail/imports", json=payload))
+
+
+@track_app.command("mail-suggestions")
+def mail_suggestions(
+    pending_only: bool = typer.Option(True, "--pending/--all", help="只看待审（默认）或全部"),
+) -> None:
+    """查看求职邮件生成的待审日程建议（用界面「提醒」页核对后写入）。"""
+    items = _request("GET", "/job-mail/suggestions", params={"status": "" if not pending_only else "pending",
+                                                             "limit": 100})
+    _emit(items)
+
+
 @track_app.command("upload")
 def upload_recording(
     event_id: int = typer.Argument(..., help="面试日程 ID"),

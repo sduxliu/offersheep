@@ -33,6 +33,12 @@ uv run oc start                          # 启动，浏览器打开 http://local
 数据默认保存在**仓库同级**目录 `../offersheep-data/`（数据库、录音、密钥配置都在这里，不进仓库）；
 可用环境变量 `OFFERPILOT_DATA` 指定其他位置。卸载只需删除仓库目录和数据目录。
 
+### 桌面快捷方式
+
+仓库自带 `scripts/start-offersheep.ps1`：未运行则后台拉起服务，然后打开浏览器。
+`scripts/make-shortcut.ps1` 可一键在桌面生成「OfferSheep」快捷方式（小羊图标）。
+双击即达 [http://localhost:8080](http://localhost:8080)。
+
 ## 首次配置（约 5 分钟）
 
 1. **文本 AI**（复盘、对话必需）：设置 → AI 与模型 → 添加供应商
@@ -88,10 +94,24 @@ uv run oc start                          # 启动，浏览器打开 http://local
 
 隐私：粘贴或拉取的邮件只在本机保存有限摘要（90 天后清除待审证据），当前识别不经过任何 AI 服务商。
 
-## 让 ZCode 帮你操作
+## 让 ZCode / Codex 帮你操作
 
-把 [`skills/offersheep/SKILL.md`](skills/offersheep/SKILL.md) 放进 ZCode 技能目录（如 `~/.zcode/skills/offersheep/`），
-然后就可以直接对 ZCode 说「我投了 xx 公司的 xx 岗」「帮我把这场面试的录音复盘一下」。
+已提供 **Agent Skill** 入口：把 [`skills/offersheep/SKILL.md`](skills/offersheep/SKILL.md) 复制到对应目录即可——
+
+```bash
+# ZCode
+cp skills/offersheep/SKILL.md ~/.zcode/skills/offersheep/SKILL.md
+# Codex
+cp skills/offersheep/SKILL.md ~/.codex/skills/offersheep/SKILL.md
+```
+
+之后直接对 AI 说人话即可：「我投了 xx 公司的 xx 岗（Boss 直聘）」「帮我把这场面试的录音复盘一下」
+「今天有什么要跟进」，AI 会按技能文档执行 `oc track` 命令完成记录。
+典型场景：**你在 Boss 上投完简历，对 ZCode 说一句，它就帮你查重、记投递、建跟进待办。**
+
+进阶：上游还内置 MCP 服务（`uv run oc mcp connect`），可让 Agent 生成“待确认”的写操作提案，
+需在另一个终端用 `oc mcp review` 逐条确认，适合要求更强审计的场景；日常用上面的 Skill 即可。
+
 底层命令：
 
 ```bash
