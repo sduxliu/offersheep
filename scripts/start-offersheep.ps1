@@ -29,7 +29,7 @@ if (-not (Test-Healthy)) {
         [System.Windows.Forms.MessageBox]::Show('uv not found. Please install uv and add it to PATH.', 'OfferSheep launch failed') | Out-Null
         exit 1
     }
-    Start-Process -FilePath $uv.Source -ArgumentList @('run', 'oc', 'start', '--port', "$Port") -WorkingDirectory $repo -WindowStyle Hidden
+    Start-Process -FilePath $uv.Source -ArgumentList @('run', 'oc', 'start', '--host', '127.0.0.1', '--enable-local-mail-setup', '--port', "$Port") -WorkingDirectory $repo -WindowStyle Hidden
     $ready = $false
     for ($i = 0; $i -lt 30; $i += 1) {
         Start-Sleep -Seconds 1
