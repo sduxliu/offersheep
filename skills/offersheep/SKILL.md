@@ -30,6 +30,7 @@ curl -s http://127.0.0.1:8080/api/health
 | 完成待办/面试 | `uv run oc track done <日程ID>` |
 | 今日提醒 | `uv run oc track reminders` |
 | 导入求职邮件 | `uv run oc track mail-import <邮件文本文件> [--subject 主题] [--received "2026-11-08 10:00"]` |
+| 收取邮箱 | `uv run oc track mail-sync`（触发同步并等待完成，输出结果与待审建议） |
 | 查看邮件建议 | `uv run oc track mail-suggestions`（待审日程建议，需用户在界面「提醒」页核对后才写入） |
 | 上传录音 | `uv run oc track upload <面试日程ID> <录音文件路径>` |
 | 转写录音 | `uv run oc track transcribe <录音ID>`（默认等待完成） |
@@ -44,8 +45,9 @@ curl -s http://127.0.0.1:8080/api/health
 **投完简历**：`add-app` 记录（备注写渠道），再 `add-todo` 一条 7 天后的「跟进投递进度」。
 
 **收到面试邀请**：`set-status <ID> interview`，再 `add-interview` 登记时间与会议链接（默认提前 1 天提醒）。
-若用户给的是邮件文本（或让 AI 去 Boss/邮箱复制邀请内容），可先 `mail-import` 生成待审建议，
-提醒用户到「提醒」页核对确认——不要替用户确认邮件建议。
+若用户给的是邮件文本（或让 AI 去 Boss/邮箱复制邀请内容），可先 `mail-import` 生成待审建议。
+用户已连接 QQ 邮箱时，说“看看邮箱”就执行 `mail-sync`，把返回的待审建议摘要讲给用户，
+并提醒到界面「提醒」页核对确认——不要替用户确认邮件建议。
 
 **从 Boss 等平台投递后**：让 AI 先 `apps` 查重，再 `add-app` 记录（备注写渠道和 JD 链接），`add-todo` 一条 7 天后的「跟进投递进度」。
 

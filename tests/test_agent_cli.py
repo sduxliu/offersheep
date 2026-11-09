@@ -83,6 +83,13 @@ def test_mail_import_creates_pending_suggestion(monkeypatch, tmp_path):
     assert [item["id"] for item in listed["items"]] == [suggestion["id"]]
 
 
+def test_mail_sync_reports_unconnected_mailbox(monkeypatch, tmp_path):
+    _wire(monkeypatch, tmp_path)
+    result = runner.invoke(cli_app, ["track", "mail-sync"])
+    assert result.exit_code == 1
+    assert "not_connected" in result.stderr
+
+
 def test_parse_local_time_adds_offset():
     value = agent_cli.parse_local_time("2026-11-20 10:00")
     assert value.startswith("2026-11-20T10:00:00") and ("+" in value[19:] or "-" in value[19:])

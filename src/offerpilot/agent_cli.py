@@ -214,6 +214,33 @@ def mail_suggestions(
     _emit(items)
 
 
+@track_app.command("mail-sync")
+def mail_sync(
+    timeout: int = typer.Option(300, help="等待同步完成的最长秒数"),
+) -> None:
+    """触发一次邮箱同步并等待完成；输出同步结果与当前待审建议摘要。"""
+    run = _request("POST", "/job-mail/sync")
+    run_id = run.get("id") or run.get("run_id")
+    deadline = time.monotonic() + timeout
+    status: dict[str, Any] = {}
+    while time.monotonic() < deadline:
+        status = _request("GET", "/job-mail/status")
+        current = status.get("run") or {}
+        if current.get("id") == run_id and current.get("status") != "running":
+            break
+        time.sleep(2)
+    suggestions = _request("GET", "/job-mail/suggestions", params={"status": "pending", "limit": 20})
+    _emit({
+        "run": status.get("run"),
+        "budget": status.get("budget"),
+        "pending_suggestions": [
+            {"id": item["id"], "action": item["action"], "time_mode": item["time_mode"],
+             "proposed_fields": item.get("proposed_fields"), "reason": item.get("reason")}
+            for item in suggestions.get("items", [])
+        ],
+    })
+
+
 @track_app.command("upload")
 def upload_recording(
     event_id: int = typer.Argument(..., help="面试日程 ID"),
